@@ -1,0 +1,6 @@
+[browser]
+gatherUsageStats = false     # Desactiva el envío de estadísticas de uso de Streamlit
+
+[server]
+address = "localhost"        # Solo accesible desde el propio equipo
+maxUploadSize = 200          # Tamaño máximo por archivo en MB

@@ -1,0 +1,20 @@
+# Archivos generados por Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Entorno virtual (lo crea uv)
+.venv
+
+# Datos reales y resultados: nunca se suben a git
+tests/cases/
+output/
+*.xlsx
+errores.log
+
+# Archivos temporales de Excel abiertos (~$archivo.xlsx)
+~$*
+.DS_Store

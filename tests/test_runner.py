@@ -1,0 +1,106 @@
+from datetime import datetime
+from io import BytesIO
+
+import pytest
+from openpyxl import load_workbook
+
+from core.runner import StageError, run_stage, save_result
+from core.settings import SEVERITY_FILLS, WARNING
+from tests import stage_99_fake
+from tests.helpers import make_xlsx
+
+HEADER = ["Codigo", "Fecha", "Valor", "Fuente"]
+
+
+def area_a():
+    return make_xlsx(
+        [
+            HEADER,
+            ["001", "05/03/2024", "1.500.000", " PGN "],
+            [None, None, None, None],
+            ["002", datetime(2024, 3, 6), 2000000, "Otros"],
+        ],
+        sheet="Ejecucion",
+        name="area_a.xlsx",
+    )
+
+
+def area_b():
+    return make_xlsx(
+        [HEADER, ["001", "05/03/2024", "1500000", "PGN"], ["003", "xx/03/2024", "abc", "PGN"]],
+        sheet="Ejecucion",
+        name="area_b.xlsx",
+    )
+
+
+def catalog():
+    return make_xlsx([["Codigo", "Nombre"], ["001", "Proyecto uno"]], sheet="Catalogo", header_row=2, name="cat.xlsx")
+
+
+def test_full_run():
+    steps = []
+    result = run_stage(
+        stage_99_fake,
+        {"reports": [area_a(), area_b()], "catalog": [catalog()]},
+        progress=lambda step, total, text: steps.append(step),
+    )
+    summary = result.summary
+    assert steps == [1, 2, 3, 4]
+    assert summary.rows_read == 6  # 3 + 2 de los reportes y 1 del catálogo
+    assert summary.rows_removed == 2  # Una fila vacía y un duplicado entre archivos
+    assert summary.rows_output == 3
+    assert [(i.file_name, i.rows) for i in summary.input_files] == [
+        ("area_a.xlsx", 3), ("area_b.xlsx", 2), ("cat.xlsx", 1)
+    ]
+    assert result.output_file_name.startswith("E99_fake_procesado_")
+    assert result.log_file_name.startswith("E99_fake_log_")
+
+    # Archivo de salida: sin columnas internas, con formatos y resaltado.
+    sheet = load_workbook(BytesIO(result.output_bytes)).active
+    header = [c.value for c in sheet[1]]
+    assert header == ["Codigo", "Fecha", "Valor", "Fuente", "Nombre", "Valor (millones)"]
+    assert sheet["A2"].value == "001" and sheet["E2"].value == "Proyecto uno"
+    assert sheet["B2"].number_format == "dd/mm/yyyy"
+    assert sheet["C2"].number_format == "#,##0.00"
+    assert sheet.auto_filter.ref and sheet.freeze_panes == "A2"
+    assert sheet["D3"].fill.start_color.rgb.endswith(SEVERITY_FILLS[WARNING])  # Fuente "Otros"
+    assert sheet["C4"].value == "abc" and sheet["C4"].fill.fill_type == "solid"  # Valor inválido
+
+    # Log: cuatro hojas con filtros y paneles inmovilizados.
+    log = load_workbook(BytesIO(result.log_bytes))
+    assert log.sheetnames == ["Resumen", "Hallazgos", "Cambios", "Eliminados"]
+    for ws in log.worksheets:
+        assert ws.auto_filter.ref and ws.freeze_panes == "A2"
+    removed_rows = [(r[0], r[1]) for r in log["Eliminados"].iter_rows(min_row=2, values_only=True)]
+    assert removed_rows == [("area_a.xlsx", 3), ("area_b.xlsx", 2)]
+
+
+def test_missing_required_input():
+    with pytest.raises(StageError) as error:
+        run_stage(stage_99_fake, {"catalog": [catalog()]})
+    assert any("Reportes de prueba" in p for p in error.value.problems)
+
+
+def test_too_many_files_for_single_input():
+    with pytest.raises(StageError) as error:
+        run_stage(stage_99_fake, {"reports": [area_a()], "catalog": [catalog(), catalog()]})
+    assert any("un solo archivo" in p for p in error.value.problems)
+
+
+def test_structure_errors_from_all_files_stop_processing():
+    bad = make_xlsx([["Codigo", "Valor"]], sheet="Ejecucion", name="malo.xlsx")
+    wrong_sheet = make_xlsx([HEADER], sheet="Hoja1", name="otra_hoja.xlsx")
+    with pytest.raises(StageError) as error:
+        run_stage(stage_99_fake, {"reports": [area_a(), bad, wrong_sheet]})
+    problems = error.value.problems
+    assert any("malo.xlsx" in p and "EST-003" in p for p in problems)
+    assert any("otra_hoja.xlsx" in p and "EST-002" in p for p in problems)
+
+
+def test_save_result_never_overwrites(tmp_path):
+    result = run_stage(stage_99_fake, {"reports": [area_a()]})
+    first = save_result(result, tmp_path)
+    second = save_result(result, tmp_path)
+    assert first[0] != second[0] and first[1] != second[1]
+    assert second[0].name.endswith("_1.xlsx")
+    assert len(list(tmp_path.iterdir())) == 4
