@@ -82,7 +82,7 @@ def run_stage(
     report(1)
     problems = check_inputs(specs, files)
     if problems:
-        raise StageError("Los archivos cargados no corresponden a lo que necesita la etapa.", problems)
+        raise StageError(_inputs_message(files), problems)
 
     # 2 y 3. Lectura y validación estricta, archivo por archivo
     report(2)
@@ -91,7 +91,8 @@ def run_stage(
         read_results[spec.key] = [read_file(f, spec) for f in files.get(spec.key, [])]
     problems = [p for results in read_results.values() for r in results for p in r.problems]
     if problems:
-        raise StageError("La estructura de uno o varios archivos no es la esperada.", problems)
+        failed = sum(1 for results in read_results.values() for r in results if r.problems)
+        raise StageError(_structure_message(failed, _count_files(files)), problems)
     inputs = {spec.key: combine(read_results[spec.key], spec) for spec in specs}
 
     # 4. Procesamiento de la etapa
@@ -127,6 +128,29 @@ def run_stage(
     )
     log_bytes = build_log(summary, audit)
     return StageResult(summary, audit, output_name, log_name, output_bytes, log_bytes)
+
+
+def _count_files(files: dict[str, list[Any]]) -> int:
+    return sum(len(f or []) for f in files.values())
+
+
+def _inputs_message(files: dict[str, list[Any]]) -> str:
+    """Mensaje principal cuando los archivos cargados no son los que pide la etapa."""
+    count = _count_files(files)
+    if count == 0:
+        return "No se cargó ningún archivo."
+    if count == 1:
+        return "El archivo cargado no corresponde a lo que necesita la etapa."
+    return "Los archivos cargados no corresponden a lo que necesita la etapa."
+
+
+def _structure_message(failed: int, total: int) -> str:
+    """Mensaje principal de los errores de estructura, en singular o plural según el caso."""
+    if total == 1:
+        return "La estructura del archivo no es la esperada."
+    if failed == 1:
+        return f"La estructura de 1 de los {total} archivos no es la esperada."
+    return f"La estructura de {failed} de los {total} archivos no es la esperada."
 
 
 def check_inputs(specs: list, files: dict[str, list[Any]]) -> list[str]:

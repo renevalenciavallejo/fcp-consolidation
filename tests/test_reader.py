@@ -72,3 +72,32 @@ def test_not_an_excel_file():
     file.name = "malo.xlsx"
     problems = read_file(file, SPEC).problems
     assert "EST-001" in problems[0] and "malo.xlsx" in problems[0]
+
+
+def test_headers_in_another_row_gives_clear_message():
+    spec = InputSpec(**{**SPEC.__dict__, "header_row": 3})
+    file = make_xlsx([["Codigo", "Valor"], ["1", 1]], header_row=1)  # Sin filas de título
+    problems = read_file(file, spec).problems
+    assert len(problems) == 1
+    assert "están en la fila 1" in problems[0] and "en la fila 3" in problems[0]
+
+
+def test_without_sheet_name_uses_first_sheet():
+    spec = InputSpec(**{**SPEC.__dict__, "sheet": None})
+    file = make_xlsx([["Codigo", "Valor"], ["1", 1]], sheet="Cualquiera", extra_sheets={"Otra": [["x"]]})
+    result = read_file(file, spec)
+    assert result.problems == [] and len(result.data) == 1
+
+
+def test_column_order_only_checked_when_configured():
+    file = make_xlsx([["Valor", "Codigo"], [1, "1"]])
+    assert read_file(file, SPEC).problems == []
+    spec = InputSpec(**{**SPEC.__dict__, "check_column_order": True})
+    problems = read_file(make_xlsx([["Valor", "Codigo"], [1, "1"]]), spec).problems
+    assert len(problems) == 1 and "EST-008" in problems[0]
+
+
+def test_column_order_ignores_allowed_extra_columns():
+    spec = InputSpec(**{**SPEC.__dict__, "check_column_order": True, "allow_extra_columns": True})
+    file = make_xlsx([["Extra", "Codigo", "Otra", "Valor"], ["x", "1", "y", 1]])
+    assert read_file(file, spec).problems == []

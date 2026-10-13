@@ -93,6 +93,7 @@ def test_structure_errors_from_all_files_stop_processing():
     with pytest.raises(StageError) as error:
         run_stage(stage_99_fake, {"reports": [area_a(), bad, wrong_sheet]})
     problems = error.value.problems
+    assert error.value.message == "La estructura de 2 de los 3 archivos no es la esperada."
     assert any("malo.xlsx" in p and "EST-003" in p for p in problems)
     assert any("otra_hoja.xlsx" in p and "EST-002" in p for p in problems)
 

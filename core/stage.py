@@ -23,10 +23,11 @@ class InputSpec:
     label: str
     multiple: bool
     required: bool
-    sheet: str
+    sheet: str | None              # None = primera hoja del archivo, sin importar su nombre
     header_row: int
     columns: dict[str, str]
     allow_extra_columns: bool = False
+    check_column_order: bool = False
 
 
 def input_specs(stage: ModuleType) -> list[InputSpec]:
@@ -38,10 +39,11 @@ def input_specs(stage: ModuleType) -> list[InputSpec]:
             label=data["label"],
             multiple=data.get("multiple", False),
             required=data.get("required", True),
-            sheet=data["sheet"],
+            sheet=data.get("sheet"),
             header_row=data.get("header_row", 1),
             columns=data["columns"],
             allow_extra_columns=data.get("allow_extra_columns", False),
+            check_column_order=data.get("check_column_order", False),
         )
         for column, column_type in spec.columns.items():
             if column_type not in COLUMN_TYPES:

@@ -13,6 +13,7 @@ STRUCTURE_RULES = {
     "EST-005": "Hay encabezados repetidos",
     "EST-006": "Hay una columna con datos pero sin encabezado",
     "EST-007": "Falta una entrada obligatoria o sobran archivos",
+    "EST-008": "Las columnas no están en el orden esperado",
 }
 
 # Reglas comunes que sí quedan registradas en el log.

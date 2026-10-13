@@ -62,12 +62,16 @@ for spec in input_specs(stage):
         accept_multiple_files=spec.multiple,
         key=f"upload_{stage_index}_{spec.key}_{st.session_state.uploader_version}",
     )
+    # Los textos del cargador de Streamlit están en plural y no se pueden cambiar; esto los aclara.
+    st.caption("Puede cargar varios archivos .xlsx." if spec.multiple else "Cargue un solo archivo .xlsx.")
     if spec.multiple:
         files[spec.key] = list(uploaded or [])
     else:
         files[spec.key] = [uploaded] if uploaded is not None else []
 
 missing_required = any(spec.required and not files[spec.key] for spec in input_specs(stage))
+single_file_stage = len(input_specs(stage)) == 1 and not input_specs(stage)[0].multiple
+uploaded_count = sum(len(f) for f in files.values())
 
 if st.button("Procesar", type="primary", disabled=missing_required):
     st.session_state.result = None
@@ -85,14 +89,18 @@ if st.button("Procesar", type="primary", disabled=missing_required):
     except StageError as error:
         progress_bar.empty()
         problems = "\n".join(f"- {p}" for p in error.problems)
-        st.error(f"{error.message}\n\n{problems}\n\nCorrija los archivos y vuelva a cargarlos.")
+        fix = "Corrija el archivo y vuelva a cargarlo." if uploaded_count == 1 else "Corrija los archivos y vuelva a cargarlos."
+        st.error(f"{error.message}\n\n{problems}\n\n{fix}")
     except Exception as error:
         progress_bar.empty()
         log_exception(error)
         st.error(UNEXPECTED_ERROR_MESSAGE)
 
 if missing_required and st.session_state.result is None:
-    st.caption("Cargue todos los archivos obligatorios para habilitar el botón Procesar.")
+    if single_file_stage:
+        st.caption("Cargue el archivo para habilitar el botón Procesar.")
+    else:
+        st.caption("Cargue todos los archivos obligatorios para habilitar el botón Procesar.")
 
 # --- Resultados ------------------------------------------------------------
 

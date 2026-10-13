@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 0. Estado actual y comandos
 
-- La arquitectura base está construida (`core/`, `app.py`, `cli.py`, pruebas). **`STAGES` está vacío a propósito:** todavía no hay etapas reales y la app muestra un aviso. No inventar etapas ni reglas; esperar la `ESPECIFICACION.md` de cada una.
+- La arquitectura base está construida (`core/`, `app.py`, `cli.py`, pruebas). No inventar etapas ni reglas; esperar la `ESPECIFICACION.md` de cada una.
+- Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Solo tiene implementada la validación de estructura; `process()` devuelve los datos sin cambios hasta que se especifiquen las reglas de limpieza.
 - `tests/stage_99_fake/` es una etapa ficticia que **solo** sirve para probar el núcleo. No registrarla en `STAGES`.
 
 ```bash
@@ -121,7 +122,11 @@ Cada etapa declara en su `config.py` las entradas que necesita. Una etapa puede 
 - Una entrada que acepta **varios archivos con la misma estructura** (por ejemplo, un archivo por área). El lector los une en un solo `DataFrame`.
 - **Varias entradas con estructuras distintas** (por ejemplo, un reporte de compromisos y un reporte de pagos).
 
-Cada entrada define: identificador, etiqueta para el usuario, si acepta varios archivos, si es obligatoria, hoja, fila de encabezados, columnas esperadas con su tipo y, opcionalmente, `allow_extra_columns` (por defecto `False`: columnas no declaradas detienen el proceso).
+Cada entrada define: identificador, etiqueta para el usuario, si acepta varios archivos, si es obligatoria, hoja, fila de encabezados y columnas esperadas con su tipo. Opcionales:
+
+- `sheet: None`: usa la primera hoja sin validar su nombre (útil cuando el sistema que exporta cambia el nombre).
+- `allow_extra_columns` (por defecto `False`: columnas no declaradas detienen el proceso).
+- `check_column_order` (por defecto `False`): exige que las columnas estén en el orden declarado en `columns` (EST-008).
 
 Al leer, el lector agrega a cada registro dos columnas internas:
 
@@ -176,7 +181,7 @@ El ejecutor siempre sigue este orden:
 
 1. **Verificación de entradas:** están todas las entradas obligatorias y no hay archivos de más en las entradas de un solo archivo.
 2. **Lectura:** cada archivo se lee en la hoja configurada. Se agregan `_source_file` y `_source_row`. Los archivos de una misma entrada se unen.
-3. **Validación de estructura (estricta), archivo por archivo:** hoja, encabezados, columnas obligatorias, columnas sobrantes. Si cualquier archivo falla, **se detiene sin generar resultados** y se explican todos los problemas de todos los archivos.
+3. **Validación de estructura (estricta), archivo por archivo:** hoja, encabezados, columnas obligatorias, columnas sobrantes y, si se configura, orden de columnas. Si cualquier archivo falla, **se detiene sin generar resultados** y se explican todos los problemas de todos los archivos.
 4. **Procesamiento de la etapa** (`process`), que internamente sigue este orden:
    1. Limpieza (espacios, caracteres invisibles, filas vacías, filas de totales).
    2. Conversión de tipos (fechas, números, códigos).
@@ -239,7 +244,7 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
 
 - Formato: `<TIPO>-<NNN>`, por ejemplo `LIM-001`.
 - Tipos: `EST` estructura, `LIM` limpieza, `TIP` conversión de tipos, `CON` consolidación, `DUP` duplicados, `VAL` validación de negocio, `TRA` transformación.
-- Las reglas comunes están en `core/rules.py` (`EST-001…007` aparecen en los mensajes de error de estructura; `LIM-001/002`, `TIP-001…004` y `DUP-001` quedan en el log). Las específicas de cada etapa, en el `RULES` de su `config.py`, sin repetir códigos comunes.
+- Las reglas comunes están en `core/rules.py` (`EST-001…008` aparecen en los mensajes de error de estructura; `LIM-001/002`, `TIP-001…004` y `DUP-001` quedan en el log). Las específicas de cada etapa, en el `RULES` de su `config.py`, sin repetir códigos comunes.
 
 ## 8. Archivos generados
 
