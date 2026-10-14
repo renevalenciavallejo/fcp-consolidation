@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 0. Estado actual y comandos
 
 - La arquitectura base está construida (`core/`, `app.py`, `cli.py`, pruebas). No inventar etapas ni reglas; esperar la `ESPECIFICACION.md` de cada una.
-- Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Implementados: validación de estructura y eliminación de las filas de título (1 a 3); `process()` devuelve los datos sin cambios hasta que se especifiquen las reglas de limpieza.
+- Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Implementados: validación de estructura, eliminación de las filas de título (1 a 3) y conversión a moneda de las columnas E a J. Los demás pasos se agregan a medida que se especifican en su `ESPECIFICACION.md`.
 - `tests/stage_99_fake/` es una etapa ficticia que **solo** sirve para probar el núcleo. No registrarla en `STAGES`.
 
 ```bash
@@ -216,7 +216,7 @@ INPUTS = {
         "required": True,
         "sheet": "Ejecucion",
         "header_row": 1,                    # 1 = primera fila de la hoja
-        # Columnas obligatorias y su tipo: "text", "code", "number", "date"
+        # Columnas obligatorias y su tipo: "text", "code", "number", "currency", "date"
         "columns": {
             "Codigo Proyecto": "code",
             "Fecha Registro": "date",
@@ -246,7 +246,7 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
 
 - Formato: `<TIPO>-<NNN>`, por ejemplo `LIM-001`.
 - Tipos: `EST` estructura, `LIM` limpieza, `TIP` conversión de tipos, `CON` consolidación, `DUP` duplicados, `VAL` validación de negocio, `TRA` transformación.
-- Las reglas comunes están en `core/rules.py` (`EST-001…008` aparecen en los mensajes de error de estructura; `LIM-001…003`, `TIP-001…004` y `DUP-001` quedan en el log). Las específicas de cada etapa, en el `RULES` de su `config.py`, sin repetir códigos comunes.
+- Las reglas comunes están en `core/rules.py` (`EST-001…008` aparecen en los mensajes de error de estructura; `LIM-001…003`, `TIP-001…005` y `DUP-001` quedan en el log). Las específicas de cada etapa, en el `RULES` de su `config.py`, sin repetir códigos comunes.
 
 ## 8. Archivos generados
 
@@ -325,6 +325,7 @@ Solo modo no interactivo: `--stage N` y `--input <id_entrada> <archivos...>` (re
 - **Textos:** quitar espacios al inicio y final, espacios dobles, espacios no separables (`\xa0`), saltos de línea y caracteres invisibles. No quitar tildes ni cambiar mayúsculas salvo que la regla lo indique. Una celda con solo espacios queda vacía.
 - **Códigos:** siempre texto. Conservar ceros a la izquierda; se quita el `.0` de códigos guardados como número.
 - **Números:** soportar formato colombiano (`1.234.567,89`), formato estadounidense, símbolo `$` y negativos con signo o entre paréntesis. Con un solo separador se asume uso colombiano (`1,5` = 1.5; `45.000` = 45000); `1,234` genera además una Advertencia por ambigüedad. Si un valor no se puede convertir, se registra un hallazgo Error y la celda conserva el valor original (resaltada); nunca se reemplaza silenciosamente por cero o vacío.
+- **Moneda:** el tipo `currency` se convierte igual que un número (regla `TIP-005`) y en el archivo de salida se escribe con formato de moneda (`CURRENCY_FORMAT_EXCEL`). El ejecutor toma el formato del tipo declarado en `INPUTS`.
 - **Fechas:** soportar fechas nativas de Excel, número serial de Excel, texto `dd/mm/aaaa` y `aaaa-mm-dd`. Asumir día/mes (nunca mes/día). Si es ambiguo (año de dos dígitos) o inválido, se registra un hallazgo.
 - **Cambios por conversión:** solo se registran cuando el valor visible cambia (`"1.234,5"` → 1234.5), no cuando solo cambia el tipo (`"1234"` → 1234).
 - **Vacíos:** distinguir vacío de cero (`core.audit.is_empty`).

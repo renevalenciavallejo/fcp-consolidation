@@ -110,3 +110,43 @@ def test_title_rows_are_removed_and_logged():
     sheet = load_workbook(BytesIO(result.output_bytes)).active
     assert [c.value for c in sheet[1]] == COLUMNS     # La salida empieza con los encabezados
     assert sheet["A2"].value == ROW[0]
+
+
+CURRENCY_COLUMNS = ["VR. BRUTO", "VR. RTEFTE", "VR. RETEIVA", "VR. RETEICA", "VR. TASAS", "Importe"]
+
+
+def test_columns_e_to_j_are_currency():
+    assert COLUMNS[4:10] == CURRENCY_COLUMNS  # Columnas E a J del reporte
+
+
+def test_currency_columns_are_converted_and_formatted():
+    row = list(ROW)
+    row[COLUMNS.index("VR. BRUTO")] = "$ 1.000.000"   # Texto con formato colombiano
+    row[COLUMNS.index("Importe")] = "995000"          # Texto con un número simple
+    result = run(ety_file(rows=(ROW, row)))
+
+    sheet = load_workbook(BytesIO(result.output_bytes)).active
+    for letter in "EFGHIJ":
+        for number in (2, 3):
+            cell = sheet[f"{letter}{number}"]
+            assert isinstance(cell.value, (int, float)), cell.coordinate  # Excel guarda 1000000.0 como 1000000
+            assert cell.number_format == '"$" #,##0.00', cell.coordinate
+    assert sheet["E3"].value == 1000000.0
+    assert sheet["D2"].number_format != '"$" #,##0.00'  # La fecha no es moneda
+
+    # Solo se registra el cambio cuyo valor visible cambió.
+    changes = [(c.source_row, c.column, c.old_value, c.new_value) for c in result.audit.changes]
+    assert changes == [(6, "VR. BRUTO", "$ 1.000.000", 1000000.0)]
+    assert result.audit.changes[0].rule == "TIP-005"
+
+
+def test_invalid_currency_value_is_reported():
+    row = list(ROW)
+    row[COLUMNS.index("VR. RTEFTE")] = "sin valor"
+    result = run(ety_file(rows=(row,)))
+
+    findings = [(f.source_row, f.column, f.severity, f.rule) for f in result.audit.findings]
+    assert findings == [(5, "VR. RTEFTE", "Error", "TIP-005")]
+    sheet = load_workbook(BytesIO(result.output_bytes)).active
+    assert sheet["F2"].value == "sin valor"           # Se conserva el valor original
+    assert sheet["F2"].fill.fill_type == "solid"      # Resaltado como error

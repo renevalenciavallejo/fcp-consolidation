@@ -25,5 +25,6 @@ COMMON_RULES = {
     "TIP-002": "Convertir a fecha (día/mes/año)",
     "TIP-003": "Normalizar códigos como texto",
     "TIP-004": "Convertir a texto",
+    "TIP-005": "Convertir a moneda",
     "DUP-001": "Eliminar registros duplicados",
 }

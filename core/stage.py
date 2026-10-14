@@ -12,7 +12,7 @@ from types import ModuleType
 from core.rules import COMMON_RULES
 
 # Tipos de columna permitidos en la configuración de una entrada.
-COLUMN_TYPES = ("text", "code", "number", "date")
+COLUMN_TYPES = ("text", "code", "number", "currency", "date")
 
 
 @dataclass

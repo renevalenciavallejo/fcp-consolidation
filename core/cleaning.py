@@ -270,7 +270,10 @@ def remove_empty_rows(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
 
 
 def convert_columns(df: pd.DataFrame, column_types: dict[str, str], audit: AuditLog) -> pd.DataFrame:
-    """Convierte cada columna al tipo indicado ("text", "code", "number", "date").
+    """Convierte cada columna al tipo indicado ("text", "code", "number", "currency", "date").
+
+    "currency" se convierte igual que "number"; la diferencia es el formato de
+    moneda en el archivo de salida.
 
     Las columnas "text" solo pasan a texto los valores que Excel guardó como
     número (por ejemplo 5 -> "5"); su contenido no se modifica.
@@ -283,6 +286,7 @@ def convert_columns(df: pd.DataFrame, column_types: dict[str, str], audit: Audit
     df = df.copy()
     converters = {
         "number": (parse_number, "TIP-001", _same_number),
+        "currency": (parse_number, "TIP-005", _same_number),
         "date": (parse_date, "TIP-002", _same_date),
         "code": (normalize_code, "TIP-003", _same_code),
         "text": (to_text, "TIP-004", _same_code),
@@ -303,7 +307,7 @@ def convert_columns(df: pd.DataFrame, column_types: dict[str, str], audit: Audit
                 )
                 new = old
             else:
-                if column_type == "number" and is_ambiguous_number(old):
+                if column_type in ("number", "currency") and is_ambiguous_number(old):
                     audit.finding(
                         df.at[index, SOURCE_FILE], df.at[index, SOURCE_ROW], column, WARNING, rule,
                         f"Valor ambiguo: se interpretó la coma como decimal ({new})",

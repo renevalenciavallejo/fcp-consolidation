@@ -24,20 +24,27 @@ from core.settings import (
 SEVERITY_PRIORITY = list(SEVERITY_FILLS)
 
 
-def build_output(df: pd.DataFrame, findings: list[Finding], sheet_name: str = "Datos") -> bytes:
+def build_output(
+    df: pd.DataFrame,
+    findings: list[Finding],
+    column_formats: dict[str, str] | None = None,
+    sheet_name: str = "Datos",
+) -> bytes:
     """Genera el archivo de salida: datos procesados sin columnas internas.
 
+    `column_formats` indica un formato de Excel por columna (por ejemplo, moneda);
+    las demás columnas usan el formato según el tipo de valor.
     Las celdas con hallazgos se resaltan según la severidad.
     """
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = sheet_name
-    write_table(sheet, df[data_columns(df)])
+    write_table(sheet, df[data_columns(df)], column_formats)
     _highlight_findings(sheet, df, findings)
     return to_bytes(workbook)
 
 
-def write_table(sheet: Worksheet, df: pd.DataFrame) -> None:
+def write_table(sheet: Worksheet, df: pd.DataFrame, column_formats: dict[str, str] | None = None) -> None:
     """Escribe un DataFrame con encabezados en negrita, filtros, paneles inmovilizados y anchos ajustados."""
     columns = list(df.columns)
     sheet.append([str(c) for c in columns])
@@ -47,9 +54,13 @@ def write_table(sheet: Worksheet, df: pd.DataFrame) -> None:
     for values in df.itertuples(index=False):
         sheet.append([_excel_value(v) for v in values])
 
+    formats = column_formats or {}
     for row in sheet.iter_rows(min_row=2):
-        for cell in row:
-            if isinstance(cell.value, (datetime, date)):
+        for cell, column in zip(row, columns):
+            is_number = isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool)
+            if column in formats and is_number:
+                cell.number_format = formats[column]
+            elif isinstance(cell.value, (datetime, date)):
                 cell.number_format = DATE_FORMAT_EXCEL
             elif isinstance(cell.value, float):
                 cell.number_format = NUMBER_FORMAT_EXCEL
@@ -87,7 +98,7 @@ def _adjust_widths(sheet: Worksheet) -> None:
             if isinstance(cell.value, (datetime, date)):
                 length = 10
             elif isinstance(cell.value, float):
-                length = len(f"{cell.value:,.2f}")
+                length = len(f"$ {cell.value:,.2f}")
             else:
                 length = len(str(cell.value))
             longest = max(longest, length)

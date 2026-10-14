@@ -39,6 +39,9 @@ SEVERITY_FILLS = {
 # Formatos de Excel para el archivo de salida.
 DATE_FORMAT_EXCEL = "dd/mm/yyyy"
 NUMBER_FORMAT_EXCEL = "#,##0.00"
+# Moneda. Excel muestra los separadores según la configuración regional del
+# equipo (en Colombia: $ 1.234.567,89).
+CURRENCY_FORMAT_EXCEL = '"$" #,##0.00'
 
 # Formato de fecha en textos (log, mensajes).
 DATE_FORMAT_TEXT = "%d/%m/%Y"

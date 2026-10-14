@@ -9,19 +9,19 @@ INPUTS = {
         "sheet": None,          # None = primera hoja; el nombre de la hoja no se valida
         "header_row": 4,        # Las filas 1 a 3 son el título, la cantidad de registros y el rango de fechas
         "check_column_order": True,   # Las columnas deben estar en el mismo orden del reporte
-        # Columnas obligatorias, en el orden del reporte, y su tipo: "text", "code", "number", "date".
-        # Los tipos se usarán en la conversión de tipos (paso pendiente de especificar).
+        # Columnas obligatorias, en el orden del reporte, y su tipo:
+        # "text", "code", "number", "currency" (moneda), "date".
         "columns": {
             "Beneficiario Pago": "code",
             "Identificación": "code",
             "Tercero Principal": "text",
             "FECHA DE PAGO": "date",
-            "VR. BRUTO": "number",
-            "VR. RTEFTE": "number",
-            "VR. RETEIVA": "number",
-            "VR. RETEICA": "number",
-            "VR. TASAS": "number",
-            "Importe": "number",
+            "VR. BRUTO": "currency",
+            "VR. RTEFTE": "currency",
+            "VR. RETEIVA": "currency",
+            "VR. RETEICA": "currency",
+            "VR. TASAS": "currency",
+            "Importe": "currency",
             "Asiento": "code",
             "Descripción": "text",
             "LNP": "code",

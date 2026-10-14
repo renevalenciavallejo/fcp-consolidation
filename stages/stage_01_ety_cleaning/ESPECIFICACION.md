@@ -41,6 +41,16 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 | --- | --- |
 | LIM-003 | Se eliminan las filas 1, 2 y 3 (título «Todos Pagos X Comprobante», cantidad de registros y rango de fechas). Quedan en la hoja *Eliminados* del log, con su contenido en la columna donde estaba cada valor. No cuentan como registros eliminados. |
 
+### Paso 3 – Convertir a moneda las columnas E a J (implementado)
+
+| Código | Regla |
+| --- | --- |
+| TIP-005 | VR. BRUTO, VR. RTEFTE, VR. RETEIVA, VR. RETEICA, VR. TASAS e Importe se convierten a número y se escriben con formato de moneda (`$ #,##0.00`). Se aceptan números de Excel y textos en formato colombiano o estadounidense, con `$` y negativos. |
+
+- Un valor que no se puede convertir queda como estaba, resaltado en rojo, y se registra como hallazgo **Error**.
+- Un valor como `1,234` se interpreta con la coma decimal y genera una **Advertencia** por ambigüedad.
+- Solo se registra un cambio cuando el valor visible cambia (por ejemplo, el texto `$ 1.000.000`); los valores que ya eran números no generan cambios.
+
 ### Pasos siguientes (por especificar)
 
 - Limpieza de textos, conversión de tipos, duplicados, validaciones y transformaciones.
@@ -48,7 +58,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 ## Archivo de salida
 
-Los registros del reporte con los encabezados en la fila 1 (sin las filas de título).
+Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda.
 
 ## Tareas manuales
 

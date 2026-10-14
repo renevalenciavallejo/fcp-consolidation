@@ -18,7 +18,7 @@ import pandas as pd
 from core.audit import AuditLog
 from core.log_report import InputFileInfo, RunSummary, build_log
 from core.reader import ReadResult, combine, read_file
-from core.settings import OUTPUT_DIR
+from core.settings import CURRENCY_FORMAT_EXCEL, OUTPUT_DIR
 from core.stage import input_specs, stage_prefix, stage_rules
 from core.writer import build_output
 
@@ -113,7 +113,7 @@ def run_stage(
     input_files = [
         InputFileInfo(spec.label, r.file_name, r.rows) for spec in specs for r in read_results[spec.key]
     ]
-    output_bytes = build_output(output, audit.findings)
+    output_bytes = build_output(output, audit.findings, output_formats(specs))
     summary = RunSummary(
         stage_name=stage.NAME,
         started_at=started_at,
@@ -130,6 +130,16 @@ def run_stage(
     )
     log_bytes = build_log(summary, audit)
     return StageResult(summary, audit, output_name, log_name, output_bytes, log_bytes)
+
+
+def output_formats(specs: list) -> dict[str, str]:
+    """Formato de Excel por columna según el tipo declarado en las entradas de la etapa."""
+    return {
+        column: CURRENCY_FORMAT_EXCEL
+        for spec in specs
+        for column, column_type in spec.columns.items()
+        if column_type == "currency"
+    }
 
 
 def remove_title_rows(read_results: dict[str, list[ReadResult]], audit: AuditLog) -> int:
