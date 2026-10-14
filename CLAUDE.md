@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 0. Estado actual y comandos
 
 - La arquitectura base está construida (`core/`, `app.py`, `cli.py`, pruebas). No inventar etapas ni reglas; esperar la `ESPECIFICACION.md` de cada una.
-- Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Implementados: validación de estructura, eliminación de las filas de título (1 a 3) y conversión a moneda de las columnas E a J. Los demás pasos se agregan a medida que se especifican en su `ESPECIFICACION.md`.
+- Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Implementados: validación de estructura, eliminación de las filas de título (1 a 3) conversión a moneda de las columnas E a J y eliminación de las filas «Distribución Caja» (LIM-101). Los demás pasos se agregan a medida que se especifican en su `ESPECIFICACION.md`.
 - `tests/stage_99_fake/` es una etapa ficticia que **solo** sirve para probar el núcleo. No registrarla en `STAGES`.
 
 ```bash
@@ -246,7 +246,8 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
 
 - Formato: `<TIPO>-<NNN>`, por ejemplo `LIM-001`.
 - Tipos: `EST` estructura, `LIM` limpieza, `TIP` conversión de tipos, `CON` consolidación, `DUP` duplicados, `VAL` validación de negocio, `TRA` transformación.
-- Las reglas comunes están en `core/rules.py` (`EST-001…008` aparecen en los mensajes de error de estructura; `LIM-001…003`, `TIP-001…005` y `DUP-001` quedan en el log). Las específicas de cada etapa, en el `RULES` de su `config.py`, sin repetir códigos comunes.
+- Las reglas comunes están en `core/rules.py` (`EST-001…008` aparecen en los mensajes de error de estructura; `LIM-001…003`, `TIP-001…005` y `DUP-001` quedan en el log). Las específicas de cada etapa, en el `RULES` de su `config.py`, sin repetir códigos comunes. Convención: la etapa NN usa la serie NNx (etapa 1: `LIM-101`, `VAL-101`, …); las comunes usan 00x.
+- Para comparar textos de negocio (por ejemplo, un valor que identifica filas a eliminar) usar `comparable_text`, que ignora mayúsculas, tildes y espacios sobrantes.
 
 ## 8. Archivos generados
 

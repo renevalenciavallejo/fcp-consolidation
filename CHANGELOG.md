@@ -9,6 +9,8 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 - Si los encabezados de un archivo están en otra fila, el mensaje de error indica en cuál.
 - Tipo de columna `currency` (moneda, regla TIP-005): se convierte como número y se escribe con formato de moneda.
 - Etapa 1: las columnas E a J (VR. BRUTO a Importe) se convierten a moneda.
+- Etapa 1: se eliminan las filas con Descripción «Distribución Caja» (regla LIM-101), registradas en Eliminados.
+- Función `comparable_text` para comparar textos sin tener en cuenta mayúsculas, tildes ni espacios sobrantes.
 - Las filas de título anteriores a los encabezados (filas 1 a 3 del reporte ETY) quedan registradas en la hoja Eliminados (regla LIM-003) y se informan aparte en el resumen.
 
 ## 0.1.0 – Arquitectura base

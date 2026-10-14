@@ -40,5 +40,12 @@ INPUTS = {
     },
 }
 
-# Reglas propias de la etapa (se agregan a medida que se especifican).
-RULES = {}
+# Columna L del reporte y valor que identifica las filas que se eliminan.
+# Se compara sin tener en cuenta mayúsculas, tildes ni espacios sobrantes.
+DESCRIPTION_COLUMN = "Descripción"
+CASH_DISTRIBUTION_VALUE = "Distribución Caja"
+
+# Reglas propias de la etapa. Se usa la serie 1xx para no chocar con las reglas comunes.
+RULES = {
+    "LIM-101": "Eliminar las filas con Descripción «Distribución Caja»",
+}

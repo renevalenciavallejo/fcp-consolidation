@@ -150,3 +150,33 @@ def test_invalid_currency_value_is_reported():
     sheet = load_workbook(BytesIO(result.output_bytes)).active
     assert sheet["F2"].value == "sin valor"           # Se conserva el valor original
     assert sheet["F2"].fill.fill_type == "solid"      # Resaltado como error
+
+
+
+def with_description(description):
+    row = list(ROW)
+    row[COLUMNS.index("Descripción")] = description
+    return row
+
+
+def test_cash_distribution_rows_are_removed_and_logged():
+    rows = (
+        with_description("Cuentas a Pagar"),
+        with_description("Distribución Caja"),
+        with_description(" distribucion  CAJA "),   # Variación de escritura
+        with_description("Cuentas a Pagar"),
+    )
+    result = run(ety_file(rows=rows))
+
+    assert result.summary.rows_read == 4
+    assert result.summary.rows_output == 2
+    assert result.summary.rows_removed == 2
+
+    removed = [r for r in result.audit.removals if r.rule == "LIM-101"]
+    assert [r.source_row for r in removed] == [6, 7]
+    assert removed[0].reason == "Descripción «Distribución Caja»"
+    assert removed[0].row_data["Beneficiario Pago"] == ROW[0]  # Se guarda el registro completo
+
+    sheet = load_workbook(BytesIO(result.output_bytes)).active
+    descriptions = [sheet[f"L{r}"].value for r in range(2, sheet.max_row + 1)]
+    assert descriptions == ["Cuentas a Pagar", "Cuentas a Pagar"]

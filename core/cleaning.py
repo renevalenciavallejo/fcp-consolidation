@@ -9,6 +9,7 @@ Hay dos tipos de funciones:
 """
 
 import re
+import unicodedata
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -58,6 +59,18 @@ def clean_text(value: Any) -> Any:
         return value
     text = INVISIBLE_CHARS.sub("", value)
     return SPACE_CHARS.sub(" ", text).strip()
+
+
+def comparable_text(value: Any) -> str:
+    """Versión de un texto para comparar: sin espacios sobrantes, sin tildes y en minúsculas.
+
+    Sirve para reconocer valores como «Distribución Caja» aunque lleguen escritos
+    como «distribucion  caja». No modifica el dato; solo se usa para comparar.
+    """
+    if is_empty(value):
+        return ""
+    text = unicodedata.normalize("NFKD", clean_text(str(value)))
+    return "".join(c for c in text if not unicodedata.combining(c)).casefold()
 
 
 def parse_number(value: Any) -> float | None:

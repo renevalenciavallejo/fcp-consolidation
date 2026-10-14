@@ -6,6 +6,7 @@ import pytest
 from core.audit import AuditLog
 from core.cleaning import (
     clean_text,
+    comparable_text,
     convert_columns,
     normalize_code,
     parse_date,
@@ -194,3 +195,9 @@ def test_remove_duplicates_within_and_across_files():
         ("a.xlsx", 4, "Duplicado del registro en a.xlsx, fila 2"),
         ("b.xlsx", 2, "Duplicado del registro en a.xlsx, fila 3"),
     ]
+
+
+def test_comparable_text():
+    assert comparable_text(" Distribucion  CAJA ") == comparable_text("Distribución Caja")
+    assert comparable_text("Cuentas a Pagar") != comparable_text("Distribución Caja")
+    assert comparable_text(None) == ""

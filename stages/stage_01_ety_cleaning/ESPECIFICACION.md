@@ -51,6 +51,15 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 - Un valor como `1,234` se interpreta con la coma decimal y genera una **Advertencia** por ambigüedad.
 - Solo se registra un cambio cuando el valor visible cambia (por ejemplo, el texto `$ 1.000.000`); los valores que ya eran números no generan cambios.
 
+### Paso 4 – Eliminar las filas de «Distribución Caja» (implementado)
+
+| Código | Regla |
+| --- | --- |
+| LIM-101 | Se eliminan las filas cuya columna L (Descripción) es «Distribución Caja». La comparación no tiene en cuenta mayúsculas, tildes ni espacios sobrantes. |
+
+- Cada fila eliminada queda en la hoja *Eliminados* del log con todos sus datos y el motivo «Descripción «Distribución Caja»».
+- En los reportes de ejemplo, la columna L solo tiene «Cuentas a Pagar» y «Distribución Caja»; después de este paso quedan solo las filas de «Cuentas a Pagar».
+
 ### Pasos siguientes (por especificar)
 
 - Limpieza de textos, conversión de tipos, duplicados, validaciones y transformaciones.
@@ -58,7 +67,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 ## Archivo de salida
 
-Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda.
+Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja».
 
 ## Tareas manuales
 

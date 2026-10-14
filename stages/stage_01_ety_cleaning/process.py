@@ -8,8 +8,8 @@ en el orden de ESPECIFICACION.md.
 import pandas as pd
 
 from core.audit import AuditLog
-from core.cleaning import convert_columns
-from stages.stage_01_ety_cleaning.config import INPUTS
+from core.cleaning import comparable_text, convert_columns
+from stages.stage_01_ety_cleaning.config import CASH_DISTRIBUTION_VALUE, DESCRIPTION_COLUMN, INPUTS
 
 # Tipo de cada columna del reporte, según config.INPUTS.
 COLUMN_TYPES = INPUTS["ety_report"]["columns"]
@@ -18,6 +18,7 @@ COLUMN_TYPES = INPUTS["ety_report"]["columns"]
 def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     df = inputs["ety_report"]
     df = convert_currency_columns(df, audit)
+    df = remove_cash_distribution_rows(df, audit)
     return df
 
 
@@ -28,3 +29,15 @@ def convert_currency_columns(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
     """
     currency_columns = {c: t for c, t in COLUMN_TYPES.items() if t == "currency"}
     return convert_columns(df, currency_columns, audit)
+
+
+def remove_cash_distribution_rows(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
+    """Elimina las filas con Descripción «Distribución Caja» (columna L). Regla LIM-101.
+
+    Cada eliminada queda en la hoja Eliminados del log con todos sus datos.
+    """
+    target = comparable_text(CASH_DISTRIBUTION_VALUE)
+    is_cash_distribution = df[DESCRIPTION_COLUMN].map(lambda value: comparable_text(value) == target)
+    return audit.remove_rows(
+        df, is_cash_distribution, "LIM-101", f"Descripción «{CASH_DISTRIBUTION_VALUE}»"
+    )
