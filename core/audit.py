@@ -44,6 +44,13 @@ class Removal:
     row_data: dict
 
 
+@dataclass
+class AddedColumn:
+    column: str
+    rule: str
+    rows: int
+
+
 def is_empty(value: Any) -> bool:
     """True si el valor está vacío (None, NaN o NaT). Un cero NO es vacío."""
     return value is None or (not isinstance(value, (list, dict)) and bool(pd.isna(value)))
@@ -66,6 +73,7 @@ class AuditLog:
         self.changes: list[Change] = []
         self.findings: list[Finding] = []
         self.removals: list[Removal] = []
+        self.added_columns: list[AddedColumn] = []
 
     def _check_rule(self, rule: str) -> None:
         if rule not in self.rules:
@@ -99,6 +107,15 @@ class AuditLog:
         self._check_rule(rule)
         clean_data = {k: _clean(v) for k, v in row_data.items()}
         self.removals.append(Removal(source_file, int(source_row), rule, reason, clean_data))
+
+    def column_added(self, column: str, rule: str, rows: int) -> None:
+        """Registra que se agregó una columna calculada.
+
+        Se registra una vez por columna (no celda por celda) y aparece en la hoja
+        Resumen del log, con la regla y la cantidad de filas.
+        """
+        self._check_rule(rule)
+        self.added_columns.append(AddedColumn(column, rule, rows))
 
     # --- Registro en bloque -------------------------------------------------
 
@@ -169,10 +186,12 @@ class AuditLog:
         return counts
 
     def rule_counts(self) -> dict[str, int]:
-        """Cuántas veces se aplicó cada regla (cambios + hallazgos + eliminaciones)."""
+        """Cuántas veces se aplicó cada regla (cambios + hallazgos + eliminaciones + filas calculadas)."""
         counts: dict[str, int] = {}
         for item in [*self.changes, *self.findings, *self.removals]:
             counts[item.rule] = counts.get(item.rule, 0) + 1
+        for added in self.added_columns:
+            counts[added.rule] = counts.get(added.rule, 0) + added.rows
         return dict(sorted(counts.items()))
 
     def findings_df(self) -> pd.DataFrame:

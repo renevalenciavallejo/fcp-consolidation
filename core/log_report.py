@@ -72,6 +72,8 @@ def _summary_table(summary: RunSummary, audit: AuditLog) -> pd.DataFrame:
         ("Totales", "Filas de título eliminadas", summary.title_rows_removed),
         ("Totales", "Celdas modificadas", summary.cells_changed),
     ]
+    for added in audit.added_columns:
+        rows.append(("Columnas agregadas", f"{added.column} ({added.rule} - {audit.rules[added.rule]})", f"{added.rows} filas"))
     for severity, count in summary.findings_by_severity.items():
         rows.append(("Hallazgos por severidad", severity, count))
     for rule, count in summary.rule_counts.items():

@@ -4,6 +4,9 @@ from datetime import date, datetime
 from io import BytesIO
 from typing import Any
 
+import re
+from dataclasses import dataclass
+
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
@@ -19,6 +22,26 @@ from core.settings import (
     SOURCE_FILE,
     SOURCE_ROW,
 )
+
+# Referencia a otra columna dentro de una fórmula: {Nombre de la columna}.
+COLUMN_REFERENCE = re.compile(r"\{([^}]+)\}")
+
+# Ancho (en caracteres) de las columnas con fórmulas, cuyo texto no es lo que se ve.
+FORMULA_COLUMN_WIDTH = 16
+
+
+@dataclass(frozen=True)
+class ExcelFormula:
+    """Fórmula de Excel que se escribe en cada fila del archivo de salida.
+
+    Las columnas se nombran entre llaves y se convierten en la celda de la misma
+    fila al escribir, por ejemplo "={VR. BRUTO}-{Importe}" -> "=E2-J2". Así la
+    fórmula sigue siendo correcta aunque cambie la posición de las columnas.
+    """
+
+    template: str
+    number_format: str | None = None
+
 
 # Orden de prioridad de las severidades cuando una celda tiene varios hallazgos.
 SEVERITY_PRIORITY = list(SEVERITY_FILLS)
@@ -51,12 +74,18 @@ def write_table(sheet: Worksheet, df: pd.DataFrame, column_formats: dict[str, st
     for cell in sheet[1]:
         cell.font = Font(bold=True)
 
-    for values in df.itertuples(index=False):
-        sheet.append([_excel_value(v) for v in values])
+    letters = {column: get_column_letter(i + 1) for i, column in enumerate(columns)}
+    for row_number, values in enumerate(df.itertuples(index=False), start=2):
+        sheet.append([_excel_value(v, letters, row_number) for v in values])
 
     formats = column_formats or {}
+    formula_formats = _formula_formats(df)
     for row in sheet.iter_rows(min_row=2):
         for cell, column in zip(row, columns):
+            if column in formula_formats:
+                if formula_formats[column]:
+                    cell.number_format = formula_formats[column]
+                continue
             is_number = isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool)
             if column in formats and is_number:
                 cell.number_format = formats[column]
@@ -78,8 +107,11 @@ def to_bytes(workbook: Workbook) -> bytes:
     return buffer.getvalue()
 
 
-def _excel_value(value: Any) -> Any:
-    """Prepara un valor para Excel: vacíos como celda vacía y fechas de pandas como datetime."""
+def _excel_value(value: Any, letters: dict[str, str] | None = None, row_number: int = 0) -> Any:
+    """Prepara un valor para Excel: vacíos como celda vacía, fechas de pandas como datetime
+    y fórmulas con las referencias a columnas convertidas en celdas de la fila."""
+    if isinstance(value, ExcelFormula):
+        return _resolve_formula(value, letters or {}, row_number)
     if is_empty(value):
         return None
     if isinstance(value, pd.Timestamp):
@@ -87,6 +119,26 @@ def _excel_value(value: Any) -> Any:
     if hasattr(value, "item") and not isinstance(value, (str, bytes)):
         return value.item()  # Tipos de numpy -> tipos de Python
     return value
+
+
+def _resolve_formula(formula: ExcelFormula, letters: dict[str, str], row_number: int) -> str:
+    def cell_reference(match: re.Match) -> str:
+        column = match.group(1)
+        if column not in letters:
+            raise ValueError(f"La fórmula '{formula.template}' usa la columna '{column}', que no existe.")
+        return f"{letters[column]}{row_number}"
+
+    return COLUMN_REFERENCE.sub(cell_reference, formula.template)
+
+
+def _formula_formats(df: pd.DataFrame) -> dict[str, str | None]:
+    """Columnas que contienen fórmulas y el formato de número que llevan."""
+    formats = {}
+    for column in df.columns:
+        first = next((v for v in df[column] if isinstance(v, ExcelFormula)), None)
+        if first is not None:
+            formats[column] = first.number_format
+    return formats
 
 
 def _adjust_widths(sheet: Worksheet) -> None:
@@ -99,6 +151,8 @@ def _adjust_widths(sheet: Worksheet) -> None:
                 length = 10
             elif isinstance(cell.value, float):
                 length = len(f"$ {cell.value:,.2f}")
+            elif isinstance(cell.value, str) and cell.value.startswith("="):
+                length = FORMULA_COLUMN_WIDTH
             else:
                 length = len(str(cell.value))
             longest = max(longest, length)

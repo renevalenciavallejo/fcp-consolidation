@@ -60,6 +60,17 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 - Cada fila eliminada queda en la hoja *Eliminados* del log con todos sus datos y el motivo «Descripción «Distribución Caja»».
 - En los reportes de ejemplo, la columna L solo tiene «Cuentas a Pagar» y «Distribución Caja»; después de este paso quedan solo las filas de «Cuentas a Pagar».
 
+### Paso 5 – Agregar la columna Diferencia (implementado)
+
+| Código | Regla |
+| --- | --- |
+| TRA-101 | Se agrega la columna **Diferencia** a la derecha de Importe (queda en la columna K) con la fórmula de Excel `=E2-F2-G2-H2-I2-J2` en cada fila (VR. BRUTO − VR. RTEFTE − VR. RETEIVA − VR. RETEICA − VR. TASAS − Importe), con formato de moneda. |
+
+- El objetivo es identificar los registros con un valor diferente de 0: el usuario filtra la columna en Excel. La herramienta no genera hallazgos por este paso.
+- La fórmula es exacta (sin redondeo). Por la forma en que Excel guarda los decimales, algunos registros que cuadran al centavo pueden mostrar un residuo mínimo (por ejemplo, 0,0000000001) y aparecer como diferentes de 0 al filtrar.
+- La columna queda registrada en la hoja *Resumen* del log («Columnas agregadas»), no celda por celda.
+- Desde este paso, las columnas que estaban de la K en adelante (Asiento … Programa) se corren una posición a la derecha.
+
 ### Pasos siguientes (por especificar)
 
 - Limpieza de textos, conversión de tipos, duplicados, validaciones y transformaciones.
@@ -67,7 +78,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 ## Archivo de salida
 
-Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja».
+Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» y con la columna Diferencia en la K.
 
 ## Tareas manuales
 

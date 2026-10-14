@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 0. Estado actual y comandos
 
 - La arquitectura base está construida (`core/`, `app.py`, `cli.py`, pruebas). No inventar etapas ni reglas; esperar la `ESPECIFICACION.md` de cada una.
-- Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Implementados: validación de estructura, eliminación de las filas de título (1 a 3) conversión a moneda de las columnas E a J y eliminación de las filas «Distribución Caja» (LIM-101). Los demás pasos se agregan a medida que se especifican en su `ESPECIFICACION.md`.
+- Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Implementados: validación de estructura, eliminación de las filas de título (1 a 3) conversión a moneda de las columnas E a J eliminación de las filas «Distribución Caja» (LIM-101) y columna Diferencia con fórmula de Excel (TRA-101). Los demás pasos se agregan a medida que se especifican en su `ESPECIFICACION.md`.
 - `tests/stage_99_fake/` es una etapa ficticia que **solo** sirve para probar el núcleo. No registrarla en `STAGES`.
 
 ```bash
@@ -176,6 +176,9 @@ En bloque, para no escribir ciclos celda por celda en las etapas:
 - `change_column(df, column, new_values, rule, changed=None)`: registra solo las celdas que cambian.
 - `finding_column(df, mask, column, severity, rule, description, suggested_action)`
 - `remove_rows(df, mask, rule, reason)`: registra y devuelve el `DataFrame` sin esas filas (`reason` puede ser texto o una `Series` por fila).
+- `column_added(column, rule, rows)`: registra una columna calculada nueva una sola vez (aparece en Resumen como «Columnas agregadas»), no celda por celda.
+
+**Fórmulas de Excel en la salida:** una columna puede contener `core.writer.ExcelFormula(template, number_format)`. En la plantilla, las columnas se nombran entre llaves (`"={VR. BRUTO}-{Importe}"`) y el escritor las convierte en la celda de la misma fila de salida (`=E2-J2`), así que la fórmula sigue siendo correcta si cambian las posiciones o se eliminan filas. openpyxl no calcula fórmulas: el valor aparece al abrir el archivo en Excel, y las pruebas históricas no comparan esas celdas.
 
 ## 5. Flujo estándar de una etapa
 

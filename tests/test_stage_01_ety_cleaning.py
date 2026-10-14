@@ -11,6 +11,8 @@ from stages import stage_01_ety_cleaning
 from tests.helpers import make_xlsx
 
 COLUMNS = list(stage_01_ety_cleaning.INPUTS["ety_report"]["columns"])
+# Columnas del archivo de salida: las del reporte más Diferencia a la derecha de Importe (K).
+OUTPUT_COLUMNS = [*COLUMNS[:10], "Diferencia", *COLUMNS[10:]]
 
 ROW = [
     "0010000001", "12345678", "PERSONA DE PRUEBA", datetime(2026, 9, 28, 2, 0), 1000000, 0, 0,
@@ -108,7 +110,7 @@ def test_title_rows_are_removed_and_logged():
     assert removals.iloc[0]["Identificación"] == " 1"                            # Columna B
 
     sheet = load_workbook(BytesIO(result.output_bytes)).active
-    assert [c.value for c in sheet[1]] == COLUMNS     # La salida empieza con los encabezados
+    assert [c.value for c in sheet[1]] == OUTPUT_COLUMNS  # La salida empieza con los encabezados
     assert sheet["A2"].value == ROW[0]
 
 
@@ -178,5 +180,27 @@ def test_cash_distribution_rows_are_removed_and_logged():
     assert removed[0].row_data["Beneficiario Pago"] == ROW[0]  # Se guarda el registro completo
 
     sheet = load_workbook(BytesIO(result.output_bytes)).active
-    descriptions = [sheet[f"L{r}"].value for r in range(2, sheet.max_row + 1)]
+    descriptions = [sheet[f"M{r}"].value for r in range(2, sheet.max_row + 1)]  # L se corrió a M
     assert descriptions == ["Cuentas a Pagar", "Cuentas a Pagar"]
+
+
+
+def test_difference_column_has_formula_right_of_importe():
+    rows = (with_description("Distribución Caja"), ROW, ROW)
+    result = run(ety_file(rows=rows))
+
+    sheet = load_workbook(BytesIO(result.output_bytes)).active
+    assert sheet["J1"].value == "Importe" and sheet["K1"].value == "Diferencia"
+    assert sheet["L1"].value == "Asiento"
+    # La fila de Distribución Caja se eliminó: las fórmulas usan la fila de salida.
+    assert sheet["K2"].value == "=E2-F2-G2-H2-I2-J2"
+    assert sheet["K3"].value == "=E3-F3-G3-H3-I3-J3"
+    assert sheet["K2"].number_format == '"$" #,##0.00'
+
+    added = result.audit.added_columns
+    assert [(a.column, a.rule, a.rows) for a in added] == [("Diferencia", "TRA-101", 2)]
+    assert result.summary.cells_changed == 0  # La columna nueva no cuenta como celdas modificadas
+
+    summary = load_workbook(BytesIO(result.log_bytes))["Resumen"]
+    sections = [row for row in summary.iter_rows(values_only=True) if row[0] == "Columnas agregadas"]
+    assert len(sections) == 1 and sections[0][1].startswith("Diferencia (TRA-101") and sections[0][2] == "2 filas"

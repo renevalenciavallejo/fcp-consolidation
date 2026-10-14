@@ -8,6 +8,9 @@ Estructura de cada caso (los datos reales no se suben a git):
 
 Una diferencia no es automáticamente un error de la herramienta: puede ser un
 error del proceso manual. Se analiza y se documenta.
+
+Las celdas con fórmulas del archivo generado no se comparan: openpyxl no las
+calcula y el archivo aún no ha pasado por Excel, así que no tienen valor.
 """
 
 from datetime import date, datetime
@@ -41,9 +44,13 @@ def find_cases() -> list:
     return cases
 
 
-def read_rows(source) -> list[list]:
-    sheet = load_workbook(source, data_only=True).worksheets[0]
+def read_rows(source, keep_formulas: bool = False) -> list[list]:
+    sheet = load_workbook(source, data_only=not keep_formulas).worksheets[0]
     return [list(row) for row in sheet.iter_rows(values_only=True)]
+
+
+def is_formula(value) -> bool:
+    return isinstance(value, str) and value.startswith("=")
 
 
 def compare_rows(obtained: list[list], expected: list[list]) -> list[str]:
@@ -57,7 +64,7 @@ def compare_rows(obtained: list[list], expected: list[list]) -> list[str]:
         differences.append(f"Cantidad de filas: obtenido {len(obtained) - 1}, esperado {len(expected) - 1}")
     for row_number, (got_row, exp_row) in enumerate(zip(obtained[1:], expected[1:]), start=2):
         for column, got, exp in zip(header, got_row, exp_row):
-            if not same_value(got, exp):
+            if not is_formula(got) and not same_value(got, exp):
                 differences.append(f"Fila {row_number}, columna '{column}': obtenido {got!r}, esperado {exp!r}")
     return differences
 
@@ -80,6 +87,7 @@ def test_historical_case(stage, case: Path):
         if folder.is_dir()
     }
     result = run_stage(stage, files)
-    differences = compare_rows(read_rows(BytesIO(result.output_bytes)), read_rows(case / "expected.xlsx"))
+    obtained = read_rows(BytesIO(result.output_bytes), keep_formulas=True)
+    differences = compare_rows(obtained, read_rows(case / "expected.xlsx"))
     shown = "\n".join(differences[:MAX_DIFFERENCES_SHOWN])
     assert not differences, f"{len(differences)} diferencias en {case}:\n{shown}"

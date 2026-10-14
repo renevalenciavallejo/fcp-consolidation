@@ -45,7 +45,15 @@ INPUTS = {
 DESCRIPTION_COLUMN = "Descripción"
 CASH_DISTRIBUTION_VALUE = "Distribución Caja"
 
+# Columna calculada que se agrega a la derecha de AMOUNT_COLUMN (columna J).
+# Sirve para identificar los registros cuya diferencia no es 0.
+AMOUNT_COLUMN = "Importe"
+DIFFERENCE_COLUMN = "Diferencia"
+# Fórmula de Excel: {Nombre} es la celda de esa columna en la misma fila (=E2-F2-G2-H2-I2-J2).
+DIFFERENCE_FORMULA = "={VR. BRUTO}-{VR. RTEFTE}-{VR. RETEIVA}-{VR. RETEICA}-{VR. TASAS}-{Importe}"
+
 # Reglas propias de la etapa. Se usa la serie 1xx para no chocar con las reglas comunes.
 RULES = {
     "LIM-101": "Eliminar las filas con Descripción «Distribución Caja»",
+    "TRA-101": "Agregar la columna Diferencia: VR. BRUTO - VR. RTEFTE - VR. RETEIVA - VR. RETEICA - VR. TASAS - Importe",
 }
