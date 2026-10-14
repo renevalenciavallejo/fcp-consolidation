@@ -35,6 +35,12 @@ Si el archivo no cumple, el procesamiento se detiene sin generar resultados y se
 
 Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
+### Paso 2 – Eliminar las filas de título (implementado)
+
+| Código | Regla |
+| --- | --- |
+| LIM-003 | Se eliminan las filas 1, 2 y 3 (título «Todos Pagos X Comprobante», cantidad de registros y rango de fechas). Quedan en la hoja *Eliminados* del log, con su contenido en la columna donde estaba cada valor. No cuentan como registros eliminados. |
+
 ### Pasos siguientes (por especificar)
 
 - Limpieza de textos, conversión de tipos, duplicados, validaciones y transformaciones.
@@ -42,7 +48,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 ## Archivo de salida
 
-Por ahora, los mismos registros del reporte (desde la fila 5), con los encabezados en la fila 1 y sin las filas de título.
+Los registros del reporte con los encabezados en la fila 1 (sin las filas de título).
 
 ## Tareas manuales
 

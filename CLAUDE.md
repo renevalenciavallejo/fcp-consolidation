@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 0. Estado actual y comandos
 
 - La arquitectura base está construida (`core/`, `app.py`, `cli.py`, pruebas). No inventar etapas ni reglas; esperar la `ESPECIFICACION.md` de cada una.
-- Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Solo tiene implementada la validación de estructura; `process()` devuelve los datos sin cambios hasta que se especifiquen las reglas de limpieza.
+- Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Implementados: validación de estructura y eliminación de las filas de título (1 a 3); `process()` devuelve los datos sin cambios hasta que se especifiquen las reglas de limpieza.
 - `tests/stage_99_fake/` es una etapa ficticia que **solo** sirve para probar el núcleo. No registrarla en `STAGES`.
 
 ```bash
@@ -133,6 +133,8 @@ Al leer, el lector agrega a cada registro dos columnas internas:
 - `_source_file`: nombre del archivo del que proviene.
 - `_source_row`: número de fila real en ese archivo de Excel.
 
+Las filas anteriores a los encabezados (títulos del reporte) no forman parte de los datos: el lector las guarda en `ReadResult.title_rows` y el ejecutor las registra en *Eliminados* con la regla común `LIM-003`, antes de llamar a `process`. Se informan aparte («Filas de título eliminadas») y no cuentan como registros eliminados.
+
 Estas columnas permiten que el log siempre apunte al archivo y la fila que el usuario puede buscar. Se eliminan del archivo de salida. Las etapas deben conservarlas en el `DataFrame` que devuelven para que funcione el resaltado de hallazgos.
 
 **Valores leídos:** el lector usa openpyxl y entrega cada celda tal como está guardada en Excel (texto, número o fecha nativa), sin inferencia de tipos de pandas (`DataFrame` con `dtype=object`). No se convierte todo a texto porque eso volvería ambiguos los números y fechas nativos (`1.234` o `05/03/2024`). La conversión explícita la hace `convert_columns` según el tipo declarado. Los encabezados se comparan después de limpiar espacios; las filas vacías al final de la hoja se ignoran.
@@ -244,7 +246,7 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
 
 - Formato: `<TIPO>-<NNN>`, por ejemplo `LIM-001`.
 - Tipos: `EST` estructura, `LIM` limpieza, `TIP` conversión de tipos, `CON` consolidación, `DUP` duplicados, `VAL` validación de negocio, `TRA` transformación.
-- Las reglas comunes están en `core/rules.py` (`EST-001…008` aparecen en los mensajes de error de estructura; `LIM-001/002`, `TIP-001…004` y `DUP-001` quedan en el log). Las específicas de cada etapa, en el `RULES` de su `config.py`, sin repetir códigos comunes.
+- Las reglas comunes están en `core/rules.py` (`EST-001…008` aparecen en los mensajes de error de estructura; `LIM-001…003`, `TIP-001…004` y `DUP-001` quedan en el log). Las específicas de cada etapa, en el `RULES` de su `config.py`, sin repetir códigos comunes.
 
 ## 8. Archivos generados
 

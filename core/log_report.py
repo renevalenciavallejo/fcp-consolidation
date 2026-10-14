@@ -30,11 +30,12 @@ class RunSummary:
     output_file_name: str
     rows_read: int
     rows_output: int
-    rows_removed: int
+    rows_removed: int              # Registros de datos eliminados (sin contar filas de título)
     cells_changed: int
     findings_by_severity: dict[str, int]
     rule_counts: dict[str, int]
     input_files: list[InputFileInfo] = field(default_factory=list)
+    title_rows_removed: int = 0    # Filas de título anteriores a los encabezados
 
 
 def build_log(summary: RunSummary, audit: AuditLog) -> bytes:
@@ -68,6 +69,7 @@ def _summary_table(summary: RunSummary, audit: AuditLog) -> pd.DataFrame:
         ("Totales", "Registros leídos", summary.rows_read),
         ("Totales", "Registros en salida", summary.rows_output),
         ("Totales", "Registros eliminados", summary.rows_removed),
+        ("Totales", "Filas de título eliminadas", summary.title_rows_removed),
         ("Totales", "Celdas modificadas", summary.cells_changed),
     ]
     for severity, count in summary.findings_by_severity.items():

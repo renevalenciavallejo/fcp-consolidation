@@ -98,6 +98,7 @@ def run_stage(
     # 4. Procesamiento de la etapa
     report(3)
     audit = AuditLog(stage_rules(stage))
+    title_rows = remove_title_rows(read_results, audit)
     output = stage.process(inputs, audit)
     if not isinstance(output, pd.DataFrame):
         raise TypeError(f"La etapa {stage.__name__} debe devolver un DataFrame en process().")
@@ -120,7 +121,8 @@ def run_stage(
         output_file_name=output_name,
         rows_read=sum(info.rows for info in input_files),
         rows_output=len(output),
-        rows_removed=len(audit.removals),
+        rows_removed=len(audit.removals) - title_rows,
+        title_rows_removed=title_rows,
         cells_changed=len({(c.source_file, c.source_row, c.column) for c in audit.changes}),
         findings_by_severity=audit.findings_by_severity(),
         rule_counts=audit.rule_counts(),
@@ -128,6 +130,24 @@ def run_stage(
     )
     log_bytes = build_log(summary, audit)
     return StageResult(summary, audit, output_name, log_name, output_bytes, log_bytes)
+
+
+def remove_title_rows(read_results: dict[str, list[ReadResult]], audit: AuditLog) -> int:
+    """Registra como eliminadas las filas anteriores a los encabezados. Regla LIM-003.
+
+    El lector ya las dejó por fuera de los datos (no son registros); aquí solo se
+    deja constancia en el log. Devuelve cuántas filas se registraron.
+    """
+    count = 0
+    for results in read_results.values():
+        for result in results:
+            for row_number, content in result.title_rows:
+                audit.removal(
+                    result.file_name, row_number, "LIM-003",
+                    "Fila de título del reporte, anterior a los encabezados", content,
+                )
+                count += 1
+    return count
 
 
 def _count_files(files: dict[str, list[Any]]) -> int:

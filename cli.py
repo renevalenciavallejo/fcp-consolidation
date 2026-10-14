@@ -70,10 +70,11 @@ def main(argv: list[str] | None = None) -> int:
 
     summary = result.summary
     print("Resumen:")
-    print(f"  Registros leídos:     {summary.rows_read}")
-    print(f"  Registros en salida:  {summary.rows_output}")
-    print(f"  Registros eliminados: {summary.rows_removed}")
-    print(f"  Celdas modificadas:   {summary.cells_changed}")
+    print(f"  Registros leídos:           {summary.rows_read}")
+    print(f"  Registros en salida:        {summary.rows_output}")
+    print(f"  Registros eliminados:       {summary.rows_removed}")
+    print(f"  Filas de título eliminadas: {summary.title_rows_removed}")
+    print(f"  Celdas modificadas:         {summary.cells_changed}")
     for severity, count in summary.findings_by_severity.items():
         print(f"  Hallazgos {severity}: {count}")
     print(f"Archivo procesado: {output_path}")

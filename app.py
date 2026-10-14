@@ -104,8 +104,9 @@ if missing_required and st.session_state.result is None:
 
 # --- Resultados ------------------------------------------------------------
 
-result = st.session_state.result
-if result is not None and st.session_state.result_stage == stage_index:
+
+def show_results(result, saved_paths) -> None:
+    """Muestra métricas, tablas del log, botones de descarga y la ruta de la copia guardada."""
     summary = result.summary
     st.success("Procesamiento terminado. Revise el log antes de pasar a la siguiente etapa.")
 
@@ -118,6 +119,11 @@ if result is not None and st.session_state.result_stage == stage_index:
     columns[0].metric("Hallazgos: Error", summary.findings_by_severity[ERROR])
     columns[1].metric("Hallazgos: Advertencia", summary.findings_by_severity[WARNING])
     columns[2].metric("Hallazgos: Información", summary.findings_by_severity[INFO])
+    if summary.title_rows_removed:
+        st.caption(
+            f"Además se quitaron {summary.title_rows_removed} filas de título del reporte "
+            "(anteriores a los encabezados). Se pueden ver en la pestaña Eliminados."
+        )
 
     tab_findings, tab_changes, tab_removals = st.tabs(["Hallazgos", "Cambios", "Eliminados"])
     for tab, table in [
@@ -145,7 +151,23 @@ if result is not None and st.session_state.result_stage == stage_index:
         mime=XLSX_MIME,
     )
 
-    output_path, log_path = st.session_state.saved_paths
+    output_path, log_path = saved_paths
     st.caption(f"Copia guardada en: {output_path.parent}")
 
     st.button("Nuevo procesamiento", on_click=reset)
+
+
+result = st.session_state.result
+if result is not None and st.session_state.result_stage == stage_index:
+    try:
+        show_results(result, st.session_state.saved_paths)
+    except Exception as error:
+        # Nunca mostrar un traceback: el detalle queda en errores.log.
+        log_exception(error)
+        st.error(
+            "Ocurrió un error inesperado al mostrar los resultados. "
+            "Presione «Nuevo procesamiento» y procese de nuevo. Si el error se repite, "
+            "cierre la herramienta, vuelva a abrirla y comparta el archivo 'errores.log' "
+            "con la persona que mantiene la herramienta."
+        )
+        st.button("Nuevo procesamiento", on_click=reset, key="reset_after_error")

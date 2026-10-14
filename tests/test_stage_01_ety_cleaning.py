@@ -1,8 +1,10 @@
 """Etapa 1: validación de estructura del reporte ETY, con datos inventados."""
 
 from datetime import datetime
+from io import BytesIO
 
 import pytest
+from openpyxl import load_workbook
 
 from core.runner import StageError, run_stage
 from stages import stage_01_ety_cleaning
@@ -17,8 +19,15 @@ ROW = [
 ]
 
 
-def ety_file(header=COLUMNS, rows=(ROW,), sheet="sheet1", header_row=4, name="ety.xlsx"):
-    return make_xlsx([list(header), *[list(r) for r in rows]], sheet=sheet, header_row=header_row, name=name)
+TITLE_ROWS = [
+    ["Todos Pagos X Comprobante", " 1"],
+    ["De Fecha = 2026-09-28"],
+    ["A Fecha = 2026-09-30"],
+]
+
+
+def ety_file(header=COLUMNS, rows=(ROW,), sheet="sheet1", titles=TITLE_ROWS, name="ety.xlsx"):
+    return make_xlsx([*titles, list(header), *[list(r) for r in rows]], sheet=sheet, name=name)
 
 
 def run(*files):
@@ -36,7 +45,7 @@ def problems_for(*files) -> list[str]:
 
 
 def test_messages_speak_of_a_single_file():
-    error = stage_error(ety_file(header_row=1))
+    error = stage_error(ety_file(titles=[]))
     assert error.message == "La estructura del archivo no es la esperada."
 
 
@@ -76,10 +85,28 @@ def test_extra_column():
 
 
 def test_title_rows_removed():
-    problems = problems_for(ety_file(header_row=1))
+    problems = problems_for(ety_file(titles=[]))
     assert len(problems) == 1 and "están en la fila 1" in problems[0]
 
 
 def test_only_one_file_allowed():
     problems = problems_for(ety_file(name="a.xlsx"), ety_file(name="b.xlsx"))
     assert any("EST-007" in p and "un solo archivo" in p for p in problems)
+
+
+def test_title_rows_are_removed_and_logged():
+    result = run(ety_file(rows=(ROW, ROW)))
+    summary = result.summary
+    assert summary.rows_output == 2
+    assert summary.rows_removed == 0          # Las filas de título no son registros
+    assert summary.title_rows_removed == 3
+
+    removals = result.audit.removals_df()
+    assert list(removals["Fila origen"]) == [1, 2, 3]
+    assert set(removals["Código de regla"]) == {"LIM-003"}
+    assert removals.iloc[0]["Beneficiario Pago"] == "Todos Pagos X Comprobante"  # Columna A
+    assert removals.iloc[0]["Identificación"] == " 1"                            # Columna B
+
+    sheet = load_workbook(BytesIO(result.output_bytes)).active
+    assert [c.value for c in sheet[1]] == COLUMNS     # La salida empieza con los encabezados
+    assert sheet["A2"].value == ROW[0]

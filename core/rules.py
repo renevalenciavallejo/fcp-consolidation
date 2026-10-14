@@ -20,6 +20,7 @@ STRUCTURE_RULES = {
 COMMON_RULES = {
     "LIM-001": "Quitar espacios sobrantes y caracteres invisibles en textos",
     "LIM-002": "Eliminar filas completamente vacías",
+    "LIM-003": "Eliminar las filas anteriores a los encabezados (títulos del reporte)",
     "TIP-001": "Convertir a número",
     "TIP-002": "Convertir a fecha (día/mes/año)",
     "TIP-003": "Normalizar códigos como texto",

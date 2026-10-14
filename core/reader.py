@@ -6,7 +6,7 @@ la izquierda ni se confunden formatos; la conversión explícita la hacen las
 funciones de core/cleaning.py.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -32,6 +32,9 @@ class ReadResult:
     file_name: str
     data: pd.DataFrame | None
     problems: list[str]
+    # Filas anteriores a los encabezados (títulos del reporte): (fila en Excel, contenido por columna).
+    # No son registros; el ejecutor las registra como eliminadas para que el log las muestre.
+    title_rows: list[tuple[int, dict]] = field(default_factory=list)
 
     @property
     def rows(self) -> int:
@@ -121,7 +124,7 @@ def read_file(file: Any, spec: InputSpec) -> ReadResult:
         # Fila real en Excel: la que el usuario puede buscar en su archivo.
         records.append([*record, name, spec.header_row + 1 + offset])
     data = pd.DataFrame(records, columns=[*columns, SOURCE_FILE, SOURCE_ROW], dtype=object)
-    return ReadResult(name, data, [])
+    return ReadResult(name, data, [], _title_rows(rows[: spec.header_row - 1], header))
 
 
 def combine(results: list[ReadResult], spec: InputSpec) -> pd.DataFrame:
@@ -130,6 +133,27 @@ def combine(results: list[ReadResult], spec: InputSpec) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame(columns=[*spec.columns, SOURCE_FILE, SOURCE_ROW], dtype=object)
     return pd.concat(frames, ignore_index=True)
+
+
+def _title_rows(rows: list[tuple], header: tuple) -> list[tuple[int, dict]]:
+    """Contenido de las filas de título, en la columna de Excel donde está cada valor.
+
+    Se usa el nombre del encabezado de esa columna para que en la hoja Eliminados
+    cada valor aparezca bajo la misma columna que tiene en el archivo original.
+    """
+    result = []
+    for number, row in enumerate(rows, start=1):
+        content = {}
+        for position, value in enumerate(row):
+            title = header[position] if position < len(header) else None
+            column = clean_text(str(title)) if title is not None else ""
+            if column == "":
+                if _empty_cell(value):
+                    continue
+                column = f"Columna {get_column_letter(position + 1)}"
+            content[column] = value
+        result.append((number, content))
+    return result
 
 
 def _check_order(name: str, found: list[str], expected: list[str]) -> list[str]:

@@ -72,7 +72,9 @@ def test_full_run():
     for ws in log.worksheets:
         assert ws.auto_filter.ref and ws.freeze_panes == "A2"
     removed_rows = [(r[0], r[1]) for r in log["Eliminados"].iter_rows(min_row=2, values_only=True)]
-    assert removed_rows == [("area_a.xlsx", 3), ("area_b.xlsx", 2)]
+    # Primero la fila de título del catálogo (encabezados en la fila 2), luego los registros.
+    assert removed_rows == [("cat.xlsx", 1), ("area_a.xlsx", 3), ("area_b.xlsx", 2)]
+    assert summary.title_rows_removed == 1
 
 
 def test_missing_required_input():
