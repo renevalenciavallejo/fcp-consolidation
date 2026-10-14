@@ -204,3 +204,35 @@ def test_difference_column_has_formula_right_of_importe():
     summary = load_workbook(BytesIO(result.log_bytes))["Resumen"]
     sections = [row for row in summary.iter_rows(values_only=True) if row[0] == "Columnas agregadas"]
     assert len(sections) == 1 and sections[0][1].startswith("Diferencia (TRA-101") and sections[0][2] == "2 filas"
+
+
+
+def with_voucher(voucher, description="Cuentas a Pagar"):
+    row = with_description(description)
+    row[COLUMNS.index("Comprobante")] = voucher
+    return row
+
+
+def test_repeated_vouchers_are_flagged_and_rows_sorted():
+    rows = (
+        with_voucher("00000003"),                       # fila 5
+        with_voucher("00000001"),                       # fila 6
+        with_voucher("00000003"),                       # fila 7 (repetido)
+        with_voucher("00000002"),                       # fila 8
+        with_voucher("00000002", "Distribución Caja"),  # fila 9: se elimina antes, no cuenta
+    )
+    result = run(ety_file(rows=rows))
+
+    findings = [(f.source_row, f.column, f.severity, f.rule) for f in result.audit.findings]
+    assert findings == [(5, "Comprobante", "Advertencia", "VAL-101"), (7, "Comprobante", "Advertencia", "VAL-101")]
+
+    sheet = load_workbook(BytesIO(result.output_bytes)).active
+    assert sheet["O1"].value == "Comprobante"
+    assert [sheet[f"O{r}"].value for r in range(2, 6)] == ["00000001", "00000002", "00000003", "00000003"]
+    # Los repetidos quedan juntos y resaltados en amarillo; la fórmula usa la fila nueva.
+    assert sheet["O4"].fill.start_color.rgb.endswith("FFEB9C") and sheet["O5"].fill.start_color.rgb.endswith("FFEB9C")
+    assert sheet["O2"].fill.fill_type is None
+    assert sheet["K4"].value == "=E4-F4-G4-H4-I4-J4"
+
+    transformations = [(t.rule, t.detail) for t in result.audit.transformations]
+    assert transformations == [("TRA-102", "Registros ordenados por Comprobante (4 registros)")]

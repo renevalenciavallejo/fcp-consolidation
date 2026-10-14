@@ -384,3 +384,40 @@ def remove_duplicates(df: pd.DataFrame, key: list[str], audit: AuditLog) -> pd.D
         index=df.index,
     )
     return audit.remove_rows(df, duplicated, "DUP-001", reasons)
+
+
+def flag_repeated_values(
+    df: pd.DataFrame,
+    column: str,
+    audit: AuditLog,
+    rule: str,
+    severity: str,
+    suggested_action: str,
+) -> None:
+    """Registra un hallazgo en cada registro cuyo valor de `column` se repite en otro registro.
+
+    No elimina nada: sirve para que el usuario revise. Los valores se comparan
+    como códigos (sin espacios sobrantes y sin el ".0" de Excel) y los vacíos se ignoran.
+    """
+    keys = pd.Series([normalize_code(v) for v in df[column]], index=df.index, dtype=object)
+    counts = keys.value_counts(dropna=True)
+    for index, key in keys.items():
+        if is_empty(key) or counts[key] < 2:
+            continue
+        audit.finding(
+            df.at[index, SOURCE_FILE], df.at[index, SOURCE_ROW], column, severity, rule,
+            f"{column} repetido en {counts[key]} registros", df.at[index, column], suggested_action,
+        )
+
+
+def sort_rows(df: pd.DataFrame, column: str, audit: AuditLog, rule: str) -> pd.DataFrame:
+    """Ordena los registros por `column` (como texto). Los vacíos quedan al final.
+
+    El orden es estable: los registros con el mismo valor conservan el orden en
+    que venían. Se registra como transformación en el Resumen del log; la fila
+    de origen de cada registro se sigue viendo en Hallazgos, Cambios y Eliminados.
+    """
+    keys = df[column].map(lambda value: normalize_code(value) or "")
+    order = sorted(range(len(df)), key=lambda i: (keys.iat[i] == "", keys.iat[i]))
+    audit.transformation(rule, f"Registros ordenados por {column} ({len(df)} registros)")
+    return df.iloc[order]

@@ -51,6 +51,12 @@ class AddedColumn:
     rows: int
 
 
+@dataclass
+class Transformation:
+    rule: str
+    detail: str
+
+
 def is_empty(value: Any) -> bool:
     """True si el valor está vacío (None, NaN o NaT). Un cero NO es vacío."""
     return value is None or (not isinstance(value, (list, dict)) and bool(pd.isna(value)))
@@ -74,6 +80,7 @@ class AuditLog:
         self.findings: list[Finding] = []
         self.removals: list[Removal] = []
         self.added_columns: list[AddedColumn] = []
+        self.transformations: list[Transformation] = []
 
     def _check_rule(self, rule: str) -> None:
         if rule not in self.rules:
@@ -116,6 +123,12 @@ class AuditLog:
         """
         self._check_rule(rule)
         self.added_columns.append(AddedColumn(column, rule, rows))
+
+    def transformation(self, rule: str, detail: str) -> None:
+        """Registra una transformación que afecta toda la tabla y no celdas puntuales
+        (por ejemplo, ordenar los registros). Aparece en la hoja Resumen del log."""
+        self._check_rule(rule)
+        self.transformations.append(Transformation(rule, detail))
 
     # --- Registro en bloque -------------------------------------------------
 
@@ -192,6 +205,8 @@ class AuditLog:
             counts[item.rule] = counts.get(item.rule, 0) + 1
         for added in self.added_columns:
             counts[added.rule] = counts.get(added.rule, 0) + added.rows
+        for item in self.transformations:
+            counts[item.rule] = counts.get(item.rule, 0) + 1
         return dict(sorted(counts.items()))
 
     def findings_df(self) -> pd.DataFrame:

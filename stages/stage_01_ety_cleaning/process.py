@@ -8,8 +8,8 @@ en el orden de ESPECIFICACION.md.
 import pandas as pd
 
 from core.audit import AuditLog
-from core.cleaning import comparable_text, convert_columns
-from core.settings import CURRENCY_FORMAT_EXCEL
+from core.cleaning import comparable_text, convert_columns, flag_repeated_values, sort_rows
+from core.settings import CURRENCY_FORMAT_EXCEL, WARNING
 from core.writer import ExcelFormula
 from stages.stage_01_ety_cleaning.config import (
     AMOUNT_COLUMN,
@@ -18,6 +18,7 @@ from stages.stage_01_ety_cleaning.config import (
     DIFFERENCE_COLUMN,
     DIFFERENCE_FORMULA,
     INPUTS,
+    VOUCHER_COLUMN,
 )
 
 # Tipo de cada columna del reporte, según config.INPUTS.
@@ -29,6 +30,8 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     df = convert_currency_columns(df, audit)
     df = remove_cash_distribution_rows(df, audit)
     df = add_difference_column(df, audit)
+    flag_repeated_vouchers(df, audit)
+    df = sort_rows(df, VOUCHER_COLUMN, audit, "TRA-102")
     return df
 
 
@@ -66,3 +69,15 @@ def add_difference_column(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
     df.insert(position, DIFFERENCE_COLUMN, [formula] * len(df))
     audit.column_added(DIFFERENCE_COLUMN, "TRA-101", len(df))
     return df
+
+
+def flag_repeated_vouchers(df: pd.DataFrame, audit: AuditLog) -> None:
+    """Señala como Advertencia los registros con Comprobante repetido (columna O). Regla VAL-101.
+
+    No elimina registros: el usuario revisa si son duplicados reales. La celda
+    queda resaltada en amarillo y el registro aparece en la hoja Hallazgos.
+    """
+    flag_repeated_values(
+        df, VOUCHER_COLUMN, audit, "VAL-101", WARNING,
+        "Revisar si el registro está duplicado",
+    )

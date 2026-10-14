@@ -71,6 +71,18 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 - La columna queda registrada en la hoja *Resumen* del log («Columnas agregadas»), no celda por celda.
 - Desde este paso, las columnas que estaban de la K en adelante (Asiento … Programa) se corren una posición a la derecha.
 
+### Paso 6 – Identificar comprobantes repetidos y ordenar (implementado)
+
+| Código | Regla |
+| --- | --- |
+| VAL-101 | Cada registro cuyo **Comprobante** (columna O del archivo de salida) se repite en otro registro se señala como **Advertencia**: la celda queda resaltada en amarillo y el registro aparece en la hoja *Hallazgos* («Comprobante repetido en N registros», acción sugerida «Revisar si el registro está duplicado»). |
+| TRA-102 | Los registros se ordenan por Comprobante para que los repetidos queden juntos. El orden es estable (dentro del mismo comprobante se conserva el orden original) y los vacíos irían al final. |
+
+- No se elimina ningún registro: el usuario decide si es un duplicado real.
+- Se cuentan solo los registros que siguen en el archivo (las filas de «Distribución Caja» ya se eliminaron).
+- El ordenamiento queda en la hoja *Resumen* del log («Transformaciones»). La columna *Fila origen* de Hallazgos, Cambios y Eliminados sigue indicando la fila del reporte original.
+- En los reportes de ejemplo: 17 comprobantes repetidos (38 registros) y 18 (36 registros).
+
 ### Pasos siguientes (por especificar)
 
 - Limpieza de textos, conversión de tipos, duplicados, validaciones y transformaciones.
@@ -78,7 +90,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 ## Archivo de salida
 
-Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» y con la columna Diferencia en la K.
+Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K y ordenados por Comprobante (columna O).
 
 ## Tareas manuales
 

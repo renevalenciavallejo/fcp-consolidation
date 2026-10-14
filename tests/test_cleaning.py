@@ -7,6 +7,8 @@ from core.audit import AuditLog
 from core.cleaning import (
     clean_text,
     comparable_text,
+    flag_repeated_values,
+    sort_rows,
     convert_columns,
     normalize_code,
     parse_date,
@@ -201,3 +203,22 @@ def test_comparable_text():
     assert comparable_text(" Distribucion  CAJA ") == comparable_text("Distribución Caja")
     assert comparable_text("Cuentas a Pagar") != comparable_text("Distribución Caja")
     assert comparable_text(None) == ""
+
+
+def test_flag_repeated_values_ignores_empties_and_compares_as_codes():
+    rules = {**COMMON_RULES, "VAL-900": "prueba"}
+    audit = AuditLog(rules)
+    df = make_df([{"C": "001"}, {"C": " 001 "}, {"C": "002"}, {"C": None}, {"C": None}, {"C": "001"}])
+    flag_repeated_values(df, "C", audit, "VAL-900", WARNING, "Revisar")
+    assert [f.source_row for f in audit.findings] == [2, 3, 7]
+    assert audit.findings[0].description == "C repetido en 3 registros"
+    assert audit.findings[0].severity == WARNING
+
+
+def test_sort_rows_is_stable_with_empties_last():
+    rules = {**COMMON_RULES, "TRA-900": "prueba"}
+    audit = AuditLog(rules)
+    df = make_df([{"C": "002", "N": 1}, {"C": None, "N": 2}, {"C": "001", "N": 3}, {"C": "002", "N": 4}])
+    result = sort_rows(df, "C", audit, "TRA-900")
+    assert list(result["N"]) == [3, 1, 4, 2]
+    assert audit.transformations[0].detail == "Registros ordenados por C (4 registros)"
