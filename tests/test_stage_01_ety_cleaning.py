@@ -54,7 +54,8 @@ def test_messages_speak_of_a_single_file():
 def test_valid_report_is_processed():
     result = run(ety_file(rows=(ROW, ROW)))
     assert result.summary.rows_read == 2
-    assert result.output_file_name.startswith("E01_ety_cleaning_procesado_")
+    assert result.output_file_name == "ety_E01_procesado.xlsx"
+    assert result.log_file_name == "ety_E01_log.xlsx"
 
 
 def test_header_spaces_are_tolerated():

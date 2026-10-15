@@ -5,6 +5,7 @@ Streamlit) y devuelve el archivo de salida y el log como bytes. Cada interfaz
 decide qué hacer con ellos.
 """
 
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -48,6 +49,9 @@ class StageResult:
     output_bytes: bytes
     log_bytes: bytes
 
+
+# Sufijo que la herramienta agrega a los archivos procesados (por ejemplo "_E01_procesado").
+PROCESSED_SUFFIX = r"_E\d{2}_procesado$"
 
 # Recibe cada línea del log de ejecución apenas se produce.
 ProgressCallback = Callable[[str], None]
@@ -105,10 +109,7 @@ def run_stage(
 
     # 5. Construcción de resultados
     audit.step("Generando el archivo de salida y el log")
-    prefix = stage_prefix(stage)
-    timestamp = started_at.strftime("%Y%m%d_%H%M%S")
-    output_name = f"{prefix}_procesado_{timestamp}.xlsx"
-    log_name = f"{prefix}_log_{timestamp}.xlsx"
+    output_name, log_name = result_file_names(stage, names)
 
     input_files = [
         InputFileInfo(spec.label, r.file_name, r.rows) for spec in specs for r in read_results[spec.key]
@@ -133,6 +134,22 @@ def run_stage(
     audit.finish_step()
     log_bytes = build_log(summary, audit)
     return StageResult(summary, audit, output_name, log_name, output_bytes, log_bytes)
+
+
+def result_file_names(stage: ModuleType, input_names: list[str]) -> tuple[str, str]:
+    """Nombres del archivo procesado y del log: el nombre del archivo original, sin
+    cambios, seguido de la etapa (`ETY_sept.xlsx` -> `ETY_sept_E01_procesado.xlsx`).
+
+    Si el archivo ya viene procesado por otra etapa, se quita ese sufijo para que el
+    nombre no crezca de etapa en etapa (`ETY_sept_E01_procesado` -> `ETY_sept_E02_...`).
+    Con varios archivos no hay un único nombre original y se usa el de la etapa.
+    """
+    code, stage_name = stage_prefix(stage).split("_", 1)
+    if len(input_names) == 1:
+        base = re.sub(PROCESSED_SUFFIX, "", Path(input_names[0]).stem)
+    else:
+        base = stage_name
+    return f"{base}_{code}_procesado.xlsx", f"{base}_{code}_log.xlsx"
 
 
 def output_formats(specs: list) -> dict[str, str]:

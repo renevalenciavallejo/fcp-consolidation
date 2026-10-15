@@ -157,7 +157,7 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
 - `inputs` tiene una llave por cada entrada declarada. Si la entrada acepta varios archivos, su `DataFrame` ya contiene todos los archivos unidos. Una entrada opcional no cargada llega como `DataFrame` vacío con sus columnas.
 - La etapa **no lee ni escribe archivos** y **no interactúa con la interfaz**. Todo se reporta a través de `audit`.
 - `process` se organiza como una secuencia de funciones pequeñas, una por regla, en el orden del flujo (sección 5). Antes de cada una se llama `audit.step("<qué se está haciendo>")` para que el paso aparezca en el log de ejecución. `tests/stage_99_fake/process.py` muestra el patrón.
-- El prefijo de los archivos generados (`E01_area_reports`) sale del nombre de la carpeta; por eso debe seguir el formato `stage_NN_<name>`.
+- El código de etapa de los archivos generados (`E01`) y el nombre que se usa cuando hay varios archivos de entrada (`area_reports`) salen del nombre de la carpeta; por eso debe seguir el formato `stage_NN_<name>`.
 
 ### 4.4 Registro de etapas
 
@@ -271,8 +271,10 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
 - Además, se guarda automáticamente una copia en la carpeta `output/` de la aplicación.
 - Nunca se sobrescribe un archivo existente (`save_result` agrega `_1`, `_2`, …).
 - Nombres:
-  - Salida: `E<NN>_<nombre_etapa>_procesado_<AAAAMMDD_HHMMSS>.xlsx`
-  - Log: `E<NN>_<nombre_etapa>_log_<AAAAMMDD_HHMMSS>.xlsx`
+  - Salida: `<nombre del archivo original>_E<NN>_procesado.xlsx` (por ejemplo `ETY_septiembre_E01_procesado.xlsx`).
+  - Log: `<nombre del archivo original>_E<NN>_log.xlsx`.
+  - El nombre original sigue un estándar de nombrado y **no se modifica** (ni se recorta). Si el archivo de entrada ya trae el sufijo `_E<NN>_procesado` de una etapa anterior, se quita para que el nombre no crezca de etapa en etapa.
+  - Con varios archivos de entrada no hay un único nombre original: se usa el nombre de la etapa (`<nombre_etapa>_E<NN>_procesado.xlsx`).
 
 ### 8.2 Archivo de salida
 

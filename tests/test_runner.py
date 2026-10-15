@@ -4,7 +4,7 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-from core.runner import StageError, run_stage, save_result
+from core.runner import StageError, result_file_names, run_stage, save_result
 from core.settings import SEVERITY_FILLS, WARNING
 from tests import stage_99_fake
 from tests.helpers import make_xlsx
@@ -68,8 +68,9 @@ def test_full_run():
     assert [(i.file_name, i.rows) for i in summary.input_files] == [
         ("area_a.xlsx", 3), ("area_b.xlsx", 2), ("cat.xlsx", 1)
     ]
-    assert result.output_file_name.startswith("E99_fake_procesado_")
-    assert result.log_file_name.startswith("E99_fake_log_")
+    # Con varios archivos no hay un único nombre original: se usa el de la etapa.
+    assert result.output_file_name == "fake_E99_procesado.xlsx"
+    assert result.log_file_name == "fake_E99_log.xlsx"
 
     # Archivo de salida: sin columnas internas, con formatos y resaltado.
     sheet = load_workbook(BytesIO(result.output_bytes)).active
@@ -150,3 +151,16 @@ def test_save_result_never_overwrites(tmp_path):
     assert first[0] != second[0] and first[1] != second[1]
     assert second[0].name.endswith("_1.xlsx")
     assert len(list(tmp_path.iterdir())) == 4
+
+
+def test_result_names_keep_the_original_file_name():
+    assert result_file_names(stage_99_fake, ["ETY 2026-09 (v2).xlsx"]) == (
+        "ETY 2026-09 (v2)_E99_procesado.xlsx", "ETY 2026-09 (v2)_E99_log.xlsx"
+    )
+
+
+def test_result_names_do_not_grow_from_stage_to_stage():
+    # El archivo procesado en la etapa 1 entra a la etapa siguiente.
+    assert result_file_names(stage_99_fake, ["ETY_sept_E01_procesado.xlsx"])[0] == "ETY_sept_E99_procesado.xlsx"
+    # Si el usuario lo guardó con otro nombre, no se toca.
+    assert result_file_names(stage_99_fake, ["ETY_E01_procesado_v2.xlsx"])[0] == "ETY_E01_procesado_v2_E99_procesado.xlsx"
