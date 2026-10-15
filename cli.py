@@ -30,6 +30,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Algunas consolas de Windows no usan UTF-8: los símbolos del log de ejecución
+    # (▸ ✓ ✗) se reemplazan por «?» en lugar de detener el procesamiento.
+    sys.stdout.reconfigure(errors="replace")
     args = build_parser().parse_args(argv)
 
     if not 1 <= args.stage <= len(STAGES):
@@ -53,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"{stage.NAME}")
     try:
-        result = run_stage(stage, files, progress=lambda step, total, text: print(f"  [{step}/{total}] {text}"))
+        result = run_stage(stage, files, progress=print)
         output_path, log_path = save_result(result)
     except StageError as error:
         print(error.message)
@@ -68,15 +71,6 @@ def main(argv: list[str] | None = None) -> int:
         print(UNEXPECTED_ERROR_MESSAGE)
         return 1
 
-    summary = result.summary
-    print("Resumen:")
-    print(f"  Registros leídos:           {summary.rows_read}")
-    print(f"  Registros en salida:        {summary.rows_output}")
-    print(f"  Registros eliminados:       {summary.rows_removed}")
-    print(f"  Filas de título eliminadas: {summary.title_rows_removed}")
-    print(f"  Celdas modificadas:         {summary.cells_changed}")
-    for severity, count in summary.findings_by_severity.items():
-        print(f"  Hallazgos {severity}: {count}")
     print(f"Archivo procesado: {output_path}")
     print(f"Log:               {log_path}")
     return 0

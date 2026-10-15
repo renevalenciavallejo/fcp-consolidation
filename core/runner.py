@@ -17,31 +17,24 @@ import pandas as pd
 
 from core.audit import AuditLog
 from core.log_report import InputFileInfo, RunSummary, build_log
-from core.reader import ReadResult, combine, read_file
+from core.reader import ReadResult, combine, file_name, read_file
 from core.settings import CURRENCY_FORMAT_EXCEL, OUTPUT_DIR
 from core.stage import input_specs, stage_prefix, stage_rules
 from core.writer import build_output
-
-# Pasos que se informan a la interfaz mientras avanza el procesamiento.
-STEPS = [
-    "Verificando archivos cargados",
-    "Leyendo y validando la estructura de los archivos",
-    "Aplicando las reglas de la etapa",
-    "Generando el archivo de salida y el log",
-]
-
 
 class StageError(Exception):
     """Problema que impide procesar (estructura inválida, archivos faltantes).
 
     `problems` tiene un mensaje en español por cada problema encontrado, para
-    que el usuario pueda corregirlos todos de una vez.
+    que el usuario pueda corregirlos todos de una vez. `steps` es el log de
+    ejecución hasta el momento del error, para mostrar en qué paso falló.
     """
 
-    def __init__(self, message: str, problems: list[str]):
+    def __init__(self, message: str, problems: list[str], steps: list[str] | None = None):
         super().__init__(message)
         self.message = message
         self.problems = problems
+        self.steps = steps or []
 
 
 @dataclass
@@ -56,7 +49,8 @@ class StageResult:
     log_bytes: bytes
 
 
-ProgressCallback = Callable[[int, int, str], None]
+# Recibe cada línea del log de ejecución apenas se produce.
+ProgressCallback = Callable[[str], None]
 
 
 def run_stage(
@@ -69,42 +63,48 @@ def run_stage(
     `files` tiene una llave por entrada declarada en la etapa y, como valor, la
     lista de archivos de esa entrada. Lanza StageError si los archivos no
     cumplen la estructura esperada; en ese caso no se genera ningún resultado.
+    `progress` recibe cada línea del log de ejecución mientras avanza.
     """
     started_at = datetime.now()
     start = time.perf_counter()
     specs = input_specs(stage)
-
-    def report(step: int) -> None:
-        if progress is not None:
-            progress(step, len(STEPS), STEPS[step - 1])
+    # Se crea desde el inicio para que la verificación y la validación también queden en el log.
+    audit = AuditLog(stage_rules(stage), on_line=progress)
 
     # 1. Verificación de entradas
-    report(1)
+    audit.step("Verificando archivos cargados")
     problems = check_inputs(specs, files)
     if problems:
-        raise StageError(_inputs_message(files), problems)
+        for problem in problems:
+            audit.note(problem, ok=False)
+        raise StageError(_inputs_message(files), problems, audit.step_lines())
+    names = [file_name(f) for spec in specs for f in files.get(spec.key, [])]
+    audit.multiple_files = len(names) > 1
+    audit.note(f"{'1 archivo' if len(names) == 1 else f'{len(names)} archivos'}: {', '.join(names)}")
 
     # 2 y 3. Lectura y validación estricta, archivo por archivo
-    report(2)
     read_results: dict[str, list[ReadResult]] = {}
     for spec in specs:
-        read_results[spec.key] = [read_file(f, spec) for f in files.get(spec.key, [])]
+        read_results[spec.key] = [read_and_report(f, spec, audit) for f in files.get(spec.key, [])]
     problems = [p for results in read_results.values() for r in results for p in r.problems]
     if problems:
         failed = sum(1 for results in read_results.values() for r in results if r.problems)
-        raise StageError(_structure_message(failed, _count_files(files)), problems)
+        audit.finish_step()
+        raise StageError(_structure_message(failed, _count_files(files)), problems, audit.step_lines())
     inputs = {spec.key: combine(read_results[spec.key], spec) for spec in specs}
+    for data in inputs.values():
+        audit.remember_source_rows(data)
 
     # 4. Procesamiento de la etapa
-    report(3)
-    audit = AuditLog(stage_rules(stage))
     title_rows = remove_title_rows(read_results, audit)
+    audit.finish_step()
+    # La etapa abre un paso (audit.step) antes de cada regla, para que se vea en el log.
     output = stage.process(inputs, audit)
     if not isinstance(output, pd.DataFrame):
         raise TypeError(f"La etapa {stage.__name__} debe devolver un DataFrame en process().")
 
     # 5. Construcción de resultados
-    report(4)
+    audit.step("Generando el archivo de salida y el log")
     prefix = stage_prefix(stage)
     timestamp = started_at.strftime("%Y%m%d_%H%M%S")
     output_name = f"{prefix}_procesado_{timestamp}.xlsx"
@@ -128,6 +128,9 @@ def run_stage(
         rule_counts=audit.rule_counts(),
         input_files=input_files,
     )
+    # Se anota antes de construir el log para que también quede en su hoja Ejecución.
+    audit.note(f"Terminado en {summary.duration_seconds:.1f} s".replace(".", ","))
+    audit.finish_step()
     log_bytes = build_log(summary, audit)
     return StageResult(summary, audit, output_name, log_name, output_bytes, log_bytes)
 
@@ -148,6 +151,8 @@ def remove_title_rows(read_results: dict[str, list[ReadResult]], audit: AuditLog
     El lector ya las dejó por fuera de los datos (no son registros); aquí solo se
     deja constancia en el log. Devuelve cuántas filas se registraron.
     """
+    if any(result.title_rows for results in read_results.values() for result in results):
+        audit.step("Eliminando las filas de título del reporte")
     count = 0
     for results in read_results.values():
         for result in results:
@@ -158,6 +163,26 @@ def remove_title_rows(read_results: dict[str, list[ReadResult]], audit: AuditLog
                 )
                 count += 1
     return count
+
+
+def read_and_report(file: Any, spec, audit: AuditLog) -> ReadResult:
+    """Lee y valida un archivo, y deja en el log de ejecución si se pudo abrir y si su
+    estructura es la esperada (con cada problema encontrado)."""
+    result = read_file(file, spec)
+    audit.step(f"Abriendo «{result.file_name}»")
+    if not result.opened:
+        for problem in result.problems:
+            audit.note(problem, ok=False)
+        return result
+    audit.note("Archivo .xlsx válido")
+    audit.step(f"Validando la estructura de «{result.file_name}»")
+    for problem in result.problems:
+        audit.note(problem, ok=False)
+    if not result.problems:
+        order = " en el orden esperado" if spec.check_column_order else ""
+        records = "1 registro" if result.rows == 1 else f"{result.rows} registros"
+        audit.note(f"{len(spec.columns)} columnas{order}, {records}")
+    return result
 
 
 def _count_files(files: dict[str, list[Any]]) -> int:

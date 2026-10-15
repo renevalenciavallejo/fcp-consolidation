@@ -1,4 +1,4 @@
-"""Construcción del archivo de log en Excel (Resumen, Hallazgos, Cambios, Eliminados)."""
+"""Construcción del archivo de log en Excel (Resumen, Ejecución, Acciones, Hallazgos, Cambios, Eliminados)."""
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -39,10 +39,12 @@ class RunSummary:
 
 
 def build_log(summary: RunSummary, audit: AuditLog) -> bytes:
-    """Genera el log en Excel con las cuatro hojas definidas en los lineamientos."""
+    """Genera el log en Excel con las hojas definidas en los lineamientos."""
     workbook = Workbook()
     sheets = {
         "Resumen": _summary_table(summary, audit),
+        "Ejecución": audit.steps_df(),
+        "Acciones": audit.actions_df(),
         "Hallazgos": audit.findings_df(),
         "Cambios": audit.changes_df(),
         "Eliminados": audit.removals_df(),

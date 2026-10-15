@@ -60,9 +60,15 @@ Además de la descarga, la herramienta guarda una copia de cada resultado en la 
 
 ### Cómo leer el log
 
-El log es un archivo de Excel con cuatro hojas:
+Mientras procesa, la herramienta muestra en pantalla cada paso que va haciendo y su resultado (por ejemplo, «Eliminando las filas de título del reporte → 3 filas eliminadas: filas 1, 2 y 3»). Si el proceso se detiene, ahí se ve en qué paso y por qué.
+
+Al terminar, los resultados se organizan en dos pestañas: **Log de ejecución** (los pasos) y **Acciones realizadas**: todo lo que la herramienta hizo, una fila por acción (fila eliminada, valor modificado, hallazgo, columna agregada…), en el mismo orden en que se hizo.
+
+El log es un archivo de Excel con seis hojas:
 
 - **Resumen:** datos generales del procesamiento (archivos, cantidades, hallazgos).
+- **Ejecución:** los mismos pasos que se vieron en pantalla, con su resultado.
+- **Acciones:** la misma tabla de acciones realizadas que se vio en pantalla.
 - **Hallazgos:** problemas encontrados. Los de severidad **Error** deben corregirse antes de la siguiente etapa; las **Advertencias** deben revisarse.
 - **Cambios:** cada celda que la herramienta modificó, con el valor anterior y el nuevo.
 - **Eliminados:** cada registro que se quitó (filas vacías, duplicados, etc.) y el motivo.

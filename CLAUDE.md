@@ -156,7 +156,7 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
 
 - `inputs` tiene una llave por cada entrada declarada. Si la entrada acepta varios archivos, su `DataFrame` ya contiene todos los archivos unidos. Una entrada opcional no cargada llega como `DataFrame` vacío con sus columnas.
 - La etapa **no lee ni escribe archivos** y **no interactúa con la interfaz**. Todo se reporta a través de `audit`.
-- `process` se organiza como una secuencia de funciones pequeñas, una por regla, en el orden del flujo (sección 5). `tests/stage_99_fake/process.py` muestra el patrón.
+- `process` se organiza como una secuencia de funciones pequeñas, una por regla, en el orden del flujo (sección 5). Antes de cada una se llama `audit.step("<qué se está haciendo>")` para que el paso aparezca en el log de ejecución. `tests/stage_99_fake/process.py` muestra el patrón.
 - El prefijo de los archivos generados (`E01_area_reports`) sale del nombre de la carpeta; por eso debe seguir el formato `stage_NN_<name>`.
 
 ### 4.4 Registro de etapas
@@ -178,6 +178,14 @@ En bloque, para no escribir ciclos celda por celda en las etapas:
 - `remove_rows(df, mask, rule, reason)`: registra y devuelve el `DataFrame` sin esas filas (`reason` puede ser texto o una `Series` por fila).
 - `column_added(column, rule, rows)`: registra una columna calculada nueva una sola vez (aparece en Resumen como «Columnas agregadas»), no celda por celda.
 - `transformation(rule, detail)`: registra una transformación de toda la tabla, como un ordenamiento (aparece en Resumen como «Transformaciones»).
+
+Log de ejecución (lo que el usuario ve en vivo en la interfaz y en la CLI, y la hoja *Ejecución* del log):
+
+- `step(title)`: empieza un paso y cierra el anterior. Al cerrarse, si el paso no tuvo notas, su resultado se calcula solo con lo registrado durante el paso (filas eliminadas, celdas modificadas, hallazgos por severidad, columnas agregadas, transformaciones) o «Sin cambios».
+- `note(text, ok=True)`: resultado escrito a mano (✓ o ✗); lo usa el ejecutor para la verificación y la validación de estructura.
+- `finish_step()`, `steps`, `step_lines()` y `steps_df()`. El ejecutor crea el `AuditLog` con `on_line=progress`, que recibe cada línea apenas se produce. `StageError.steps` tiene el log hasta el error.
+
+Tabla de acciones: `actions` guarda todos los registros (cambios, hallazgos, eliminaciones, columnas agregadas y transformaciones) en el orden en que ocurrieron, con el paso en curso. `actions_df()` los muestra en una sola tabla (Paso, Fila, Acción, Columna, Detalle, Qué hacer, Regla, seguidas de todas las columnas del registro); leída de arriba abajo, permite reconstruir todo lo que se hizo. La columna Archivo solo aparece cuando se procesan varios archivos (`multiple_files`). El registro de un cambio o hallazgo es el original del archivo (el ejecutor lo guarda con `remember_source_rows`); el de una eliminación, el que se guardó al eliminarla. Es la tabla que ve el usuario en la interfaz y la hoja *Acciones* del log.
 
 Funciones comunes relacionadas en `core/cleaning.py`: `flag_repeated_values` (hallazgo por cada registro con un valor repetido, sin eliminar) y `sort_rows` (orden estable por una columna, vacíos al final). El resaltado de hallazgos funciona aunque se reordenen o eliminen filas, porque se ubica por `_source_file` y `_source_row`.
 
@@ -277,6 +285,8 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
 | Hoja           | Columnas                                                                                                                                                                                                                                                             |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Resumen**    | Tabla Sección / Concepto / Valor: versión de la herramienta, etapa, archivos de entrada (nombre y registros leídos de cada uno), archivo de salida, fecha y hora, duración, registros en salida, registros eliminados, celdas modificadas, hallazgos por severidad, cantidad de aplicaciones por regla |
+| **Ejecución**  | Paso, Resultado: el log de ejecución, en el orden en que ocurrió (el mismo que se ve en pantalla)                                                                                                                                                                       |
+| **Acciones**   | Paso, archivo (solo con varios archivos), fila, acción (Fila eliminada, Valor modificado, Hallazgo (severidad), Columna agregada, Transformación), columna, detalle, qué hacer, regla y todas las columnas del registro. En el orden en que ocurrió cada acción                                                                         |
 | **Hallazgos**  | Archivo origen, fila origen, columna, severidad, código de regla, descripción, valor encontrado, acción sugerida                                                                                                                                                     |
 | **Cambios**    | Archivo origen, fila origen, columna, valor anterior, valor nuevo, código de regla, descripción de la regla                                                                                                                                                          |
 | **Eliminados** | Archivo origen, fila origen, código de regla, motivo, seguido de todas las columnas del registro eliminado                                                                                                                                                           |
@@ -300,8 +310,8 @@ Flujo:
 2. **Área principal:** nombre y descripción de la etapa.
 3. **Un cargador de archivos por cada entrada declarada**, con su etiqueta. Solo acepta `.xlsx` y permite varios archivos cuando la entrada lo indica.
 4. **Botón "Procesar"**, deshabilitado hasta que estén cargadas todas las entradas obligatorias.
-5. **Indicador de progreso** por paso.
-6. **Resultados:** métricas, pestañas con tablas de Hallazgos, Cambios y Eliminados, botones de descarga y ruta de la copia en `output/`.
+5. **Log de ejecución en vivo:** cada paso y su resultado aparecen a medida que avanzan, en un bloque que no se contrae. Si el proceso se detiene, el log queda en pantalla y muestra en qué paso falló.
+6. **Resultados:** pestañas «Log de ejecución» y «Acciones realizadas» (una sola tabla, en orden cronológico), botones de descarga y ruta de la copia en `output/`. No se muestran métricas.
 7. **Botón "Nuevo procesamiento"** para limpiar la pantalla.
 
 Reglas:
@@ -324,7 +334,7 @@ Desactiva estadísticas de uso, limita el servidor a `localhost` y fija `maxUplo
 
 ### 9.4 Línea de comandos (`cli.py`)
 
-Solo modo no interactivo: `--stage N` y `--input <id_entrada> <archivos...>` (repetible). Guarda los resultados en `output/`, muestra un resumen en español y termina con código 0 (éxito), 1 (error de procesamiento) o 2 (argumentos inválidos).
+Solo modo no interactivo: `--stage N` y `--input <id_entrada> <archivos...>` (repetible). Guarda los resultados en `output/`, imprime el log de ejecución en vivo y las rutas de los archivos generados y termina con código 0 (éxito), 1 (error de procesamiento) o 2 (argumentos inválidos).
 
 ## 10. Manejo de datos
 

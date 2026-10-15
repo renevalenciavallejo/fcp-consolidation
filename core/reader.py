@@ -35,6 +35,8 @@ class ReadResult:
     # Filas anteriores a los encabezados (títulos del reporte): (fila en Excel, contenido por columna).
     # No son registros; el ejecutor las registra como eliminadas para que el log las muestre.
     title_rows: list[tuple[int, dict]] = field(default_factory=list)
+    # False si el archivo no se pudo abrir como .xlsx (regla EST-001).
+    opened: bool = True
 
     @property
     def rows(self) -> int:
@@ -58,7 +60,10 @@ def read_file(file: Any, spec: InputSpec) -> ReadResult:
     try:
         workbook = load_workbook(_as_source(file), data_only=True)
     except Exception:
-        return ReadResult(name, None, [f"[EST-001] {name}: no se pudo abrir. Verifique que sea un archivo .xlsx válido."])
+        return ReadResult(
+            name, None, [f"[EST-001] {name}: no se pudo abrir. Verifique que sea un archivo .xlsx válido."],
+            opened=False,
+        )
 
     if spec.sheet is None:
         # Sin nombre configurado se usa la primera hoja: el nombre puede variar entre exportaciones.

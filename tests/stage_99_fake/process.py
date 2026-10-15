@@ -9,13 +9,21 @@ from tests.stage_99_fake.config import DUPLICATE_KEY, INPUTS, VALID_SOURCES
 
 
 def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
+    # Cada regla abre un paso del log de ejecución, que el usuario ve en pantalla.
     df = inputs["reports"]
+    audit.step("Quitando espacios sobrantes")
     df = remove_extra_spaces(df, audit)
+    audit.step("Eliminando filas vacías")
     df = remove_empty_rows(df, audit)
+    audit.step("Convirtiendo tipos de datos")
     df = convert_columns(df, INPUTS["reports"]["columns"], audit)
+    audit.step("Agregando nombres del catálogo")
     df = add_catalog_names(df, inputs["catalog"], audit)
+    audit.step("Eliminando duplicados")
     df = remove_duplicates(df, DUPLICATE_KEY, audit)
+    audit.step("Revisando fuentes")
     check_sources(df, audit)
+    audit.step("Calculando valor en millones")
     df = add_value_in_millions(df, audit)
     return df
 

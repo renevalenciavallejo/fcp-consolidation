@@ -70,8 +70,9 @@ def test_not_an_excel_file():
 
     file = BytesIO(b"esto no es un excel")
     file.name = "malo.xlsx"
-    problems = read_file(file, SPEC).problems
-    assert "EST-001" in problems[0] and "malo.xlsx" in problems[0]
+    result = read_file(file, SPEC)
+    assert "EST-001" in result.problems[0] and "malo.xlsx" in result.problems[0]
+    assert result.opened is False
 
 
 def test_headers_in_another_row_gives_clear_message():

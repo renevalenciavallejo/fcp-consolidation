@@ -236,3 +236,48 @@ def test_repeated_vouchers_are_flagged_and_rows_sorted():
 
     transformations = [(t.rule, t.detail) for t in result.audit.transformations]
     assert transformations == [("TRA-102", "Registros ordenados por Comprobante (4 registros)")]
+
+
+def test_step_log_shows_each_rule():
+    cash = list(ROW)
+    cash[11] = "Distribución Caja"
+    lines = run(ety_file(rows=(ROW, cash, ROW))).audit.step_lines()
+    assert lines[:4] == [
+        "▸ Verificando archivos cargados",
+        "   ✓ 1 archivo: ety.xlsx",
+        "▸ Abriendo «ety.xlsx»",
+        "   ✓ Archivo .xlsx válido",
+    ]
+    assert "   ✓ 24 columnas en el orden esperado, 3 registros" in lines
+    assert "   ✓ 3 filas eliminadas: filas 1, 2 y 3" in lines
+    titles = [line for line in lines if line.startswith("▸")]
+    assert titles[4:] == [
+        "▸ Convirtiendo a moneda las columnas VR. BRUTO a Importe",
+        "▸ Eliminando las filas con Descripción «Distribución Caja»",
+        "▸ Agregando la columna Diferencia",
+        "▸ Revisando registros con Comprobante repetido",
+        "▸ Ordenando por Comprobante",
+        "▸ Generando el archivo de salida y el log",
+    ]
+    assert "   ✓ 1 fila eliminada: fila 6" in lines
+    assert "   ✓ 2 hallazgos (2 Advertencia)" in lines
+
+
+def test_actions_table_rebuilds_what_was_done_in_order():
+    cash = list(ROW)
+    cash[11] = "Distribución Caja"
+    actions = run(ety_file(rows=(ROW, cash, ROW))).audit.actions_df()
+    assert actions["Acción"].tolist() == [
+        "Fila eliminada", "Fila eliminada", "Fila eliminada",   # Filas de título 1 a 3
+        "Fila eliminada",                                       # «Distribución Caja», fila 6
+        "Columna agregada",                                     # Diferencia
+        "Hallazgo (Advertencia)", "Hallazgo (Advertencia)",     # Comprobante repetido
+        "Transformación",                                       # Orden por Comprobante
+    ]
+    assert actions["Fila"].tolist()[:4] == [1, 2, 3, 6]
+    assert actions.iloc[3]["Paso"] == "Eliminando las filas con Descripción «Distribución Caja»"
+    # Cada acción muestra el registro completo, con todas las columnas del reporte.
+    assert "Archivo" not in actions.columns
+    assert all(column in actions.columns for column in COLUMNS)
+    assert actions.iloc[3]["Descripción"] == "Distribución Caja"
+    assert actions.iloc[5]["Comprobante"] == "00000001"
