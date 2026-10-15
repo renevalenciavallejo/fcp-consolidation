@@ -8,13 +8,30 @@ import streamlit as st
 
 from core.errors import UNEXPECTED_ERROR_MESSAGE, log_exception
 from core.runner import StageError, run_stage, save_result
-from core.settings import APP_NAME, APP_VERSION
+from core.settings import APP_NAME, APP_VERSION, DOWNLOAD_BUTTON_COLOR, DOWNLOAD_BUTTON_HOVER_COLOR
 from core.stage import input_specs
 from stages import STAGES
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 st.set_page_config(page_title=APP_NAME, layout="wide")
+
+# Streamlit no permite elegir el color de cada botón: los de descarga se pintan de verde
+# con CSS, ubicándolos por su `key` (Streamlit agrega la clase st-key-<key>).
+st.html(f"""
+<style>
+.st-key-download_output button, .st-key-download_log button {{
+    background-color: {DOWNLOAD_BUTTON_COLOR};
+    border-color: {DOWNLOAD_BUTTON_COLOR};
+    color: white;
+}}
+.st-key-download_output button:hover, .st-key-download_log button:hover {{
+    background-color: {DOWNLOAD_BUTTON_HOVER_COLOR};
+    border-color: {DOWNLOAD_BUTTON_HOVER_COLOR};
+    color: white;
+}}
+</style>
+""")
 
 # Estado que sobrevive entre recargas de la página (por ejemplo, al descargar un archivo).
 st.session_state.setdefault("result", None)
@@ -70,7 +87,6 @@ for spec in input_specs(stage):
         files[spec.key] = [uploaded] if uploaded is not None else []
 
 missing_required = any(spec.required and not files[spec.key] for spec in input_specs(stage))
-single_file_stage = len(input_specs(stage)) == 1 and not input_specs(stage)[0].multiple
 uploaded_count = sum(len(f) for f in files.values())
 
 
@@ -79,8 +95,13 @@ def show_step_log(placeholder, lines: list[str]) -> None:
     placeholder.code("\n".join(lines), language=None)
 
 
-if st.button("Procesar", type="primary", disabled=missing_required):
+# Fila de botones: Procesar y, cuando hay resultados, las descargas y «Nuevo procesamiento».
+buttons_row = st.container(horizontal=True)
+
+if buttons_row.button("Procesar", type="primary", icon=":material/play_arrow:", disabled=missing_required):
     st.session_state.result = None
+    # Espacio para el mensaje de error, justo debajo del botón (como el mensaje de éxito).
+    message_area = st.empty()
     # Log en vivo, siempre visible. Al terminar se vacía: los resultados (abajo) lo vuelven a mostrar.
     # Si el proceso se detiene, queda en pantalla para ver en qué paso falló.
     log_placeholder = st.empty()
@@ -100,16 +121,10 @@ if st.button("Procesar", type="primary", disabled=missing_required):
     except StageError as error:
         problems = "\n".join(f"- {p}" for p in error.problems)
         fix = "Corrija el archivo y vuelva a cargarlo." if uploaded_count == 1 else "Corrija los archivos y vuelva a cargarlos."
-        st.error(f"{error.message}\n\n{problems}\n\n{fix}")
+        message_area.error(f"{error.message}\n\n{problems}\n\n{fix}")
     except Exception as error:
         log_exception(error)
-        st.error(UNEXPECTED_ERROR_MESSAGE)
-
-if missing_required and st.session_state.result is None:
-    if single_file_stage:
-        st.caption("Cargue el archivo para habilitar el botón Procesar.")
-    else:
-        st.caption("Cargue todos los archivos obligatorios para habilitar el botón Procesar.")
+        message_area.error(UNEXPECTED_ERROR_MESSAGE)
 
 # --- Resultados ------------------------------------------------------------
 
@@ -124,8 +139,27 @@ def show_actions(actions) -> None:
     st.dataframe(actions.fillna("").astype(str), hide_index=True, width="stretch")
 
 
-def show_results(result, saved_paths) -> None:
-    """Muestra el log de ejecución, la tabla de acciones, los botones de descarga y la ruta de la copia guardada."""
+def show_results(result, saved_paths, buttons_row) -> None:
+    """Muestra los botones de descarga junto a Procesar, el log de ejecución, la tabla de
+    acciones y la ruta de la copia guardada."""
+    buttons_row.download_button(
+        "Descargar archivo procesado",
+        data=result.output_bytes,
+        file_name=result.output_file_name,
+        mime=XLSX_MIME,
+        icon=":material/download:",
+        key="download_output",
+    )
+    buttons_row.download_button(
+        "Descargar log",
+        data=result.log_bytes,
+        file_name=result.log_file_name,
+        mime=XLSX_MIME,
+        icon=":material/download:",
+        key="download_log",
+    )
+    buttons_row.button("Nuevo procesamiento", icon=":material/restart_alt:", on_click=reset)
+
     st.success("Procesamiento terminado. Revise el log antes de pasar a la siguiente etapa.")
 
     tab_log, tab_actions = st.tabs(["Log de ejecución", "Acciones realizadas"])
@@ -134,30 +168,14 @@ def show_results(result, saved_paths) -> None:
     with tab_actions:
         show_actions(result.audit.actions_df())
 
-    columns = st.columns(2)
-    columns[0].download_button(
-        "Descargar archivo procesado",
-        data=result.output_bytes,
-        file_name=result.output_file_name,
-        mime=XLSX_MIME,
-    )
-    columns[1].download_button(
-        "Descargar log",
-        data=result.log_bytes,
-        file_name=result.log_file_name,
-        mime=XLSX_MIME,
-    )
-
     output_path, log_path = saved_paths
     st.caption(f"Copia guardada en: {output_path.parent}")
-
-    st.button("Nuevo procesamiento", on_click=reset)
 
 
 result = st.session_state.result
 if result is not None and st.session_state.result_stage == stage_index:
     try:
-        show_results(result, st.session_state.saved_paths)
+        show_results(result, st.session_state.saved_paths, buttons_row)
     except Exception as error:
         # Nunca mostrar un traceback: el detalle queda en errores.log.
         log_exception(error)
@@ -167,4 +185,6 @@ if result is not None and st.session_state.result_stage == stage_index:
             "cierre la herramienta, vuelva a abrirla y comparta el archivo 'errores.log' "
             "con la persona que mantiene la herramienta."
         )
-        st.button("Nuevo procesamiento", on_click=reset, key="reset_after_error")
+        buttons_row.button(
+            "Nuevo procesamiento", icon=":material/restart_alt:", on_click=reset, key="reset_after_error"
+        )

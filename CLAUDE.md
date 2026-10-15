@@ -309,10 +309,10 @@ Flujo:
 1. **Barra lateral:** nombre y versión de la herramienta, y selección de la etapa (en el orden del proceso).
 2. **Área principal:** nombre y descripción de la etapa.
 3. **Un cargador de archivos por cada entrada declarada**, con su etiqueta. Solo acepta `.xlsx` y permite varios archivos cuando la entrada lo indica.
-4. **Botón "Procesar"**, deshabilitado hasta que estén cargadas todas las entradas obligatorias.
+4. **Botón "Procesar"**, deshabilitado hasta que estén cargadas todas las entradas obligatorias. Cuando hay resultados, a su lado aparecen los botones de descarga y "Nuevo procesamiento". Los mensajes de éxito o error van justo debajo de esta fila.
 5. **Log de ejecución en vivo:** cada paso y su resultado aparecen a medida que avanzan, en un bloque que no se contrae. Si el proceso se detiene, el log queda en pantalla y muestra en qué paso falló.
-6. **Resultados:** pestañas «Log de ejecución» y «Acciones realizadas» (una sola tabla, en orden cronológico), botones de descarga y ruta de la copia en `output/`. No se muestran métricas.
-7. **Botón "Nuevo procesamiento"** para limpiar la pantalla.
+6. **Resultados:** pestañas «Log de ejecución» y «Acciones realizadas» (una sola tabla, en orden cronológico) y ruta de la copia en `output/`. No se muestran métricas.
+7. **Botón "Nuevo procesamiento"** (junto a Procesar) para limpiar la pantalla.
 
 Reglas:
 
@@ -324,7 +324,7 @@ Reglas:
 
 ### 9.2 Configuración de Streamlit (`.streamlit/config.toml`)
 
-Desactiva estadísticas de uso, limita el servidor a `localhost` y fija `maxUploadSize = 200` MB. La aplicación **solo se ejecuta localmente**. No se publica en Streamlit Community Cloud ni en ningún servidor.
+Desactiva estadísticas de uso, limita el servidor a `localhost`, fija `maxUploadSize = 200` MB y define el azul como color principal del tema (botón Procesar). Los botones de descarga se pintan de verde con un bloque de CSS en `app.py` (colores en `core/settings.py`); "Nuevo procesamiento" queda neutro. La aplicación **solo se ejecuta localmente**. No se publica en Streamlit Community Cloud ni en ningún servidor.
 
 ### 9.3 Inicio para el usuario final
 

@@ -5,5 +5,8 @@ gatherUsageStats = false     # Desactiva el envío de estadísticas de uso de St
 address = "localhost"        # Solo accesible desde el propio equipo
 maxUploadSize = 200          # Tamaño máximo por archivo en MB
 
+[theme]
+primaryColor = "#1565C0"     # Azul: botón Procesar (acción principal), pestañas e indicadores
+
 [client]
 showErrorDetails = "none"    # Nunca mostrar tracebacks en el navegador (el detalle va a la consola)

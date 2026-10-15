@@ -36,6 +36,11 @@ SEVERITY_FILLS = {
     WARNING: "FFEB9C",   # Amarillo claro
 }
 
+# Color de los botones de descarga en la interfaz: verde, porque entregan el resultado.
+# El azul de Procesar es el color principal del tema (.streamlit/config.toml).
+DOWNLOAD_BUTTON_COLOR = "#2E7D32"
+DOWNLOAD_BUTTON_HOVER_COLOR = "#1B5E20"   # Más oscuro al pasar el mouse
+
 # Formatos de Excel para el archivo de salida.
 DATE_FORMAT_EXCEL = "dd/mm/yyyy"
 NUMBER_FORMAT_EXCEL = "#,##0.00"
