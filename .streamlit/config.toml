@@ -5,8 +5,13 @@ gatherUsageStats = false     # Desactiva el envío de estadísticas de uso de St
 address = "localhost"        # Solo accesible desde el propio equipo
 maxUploadSize = 200          # Tamaño máximo por archivo en MB
 
-[theme]
+# El color se define por separado para el tema claro y el oscuro. Si se pusiera en
+# [theme], Streamlit lo trataría como un tema único (claro) y quitaría el modo oscuro.
+[theme.light]
 primaryColor = "#1565C0"     # Azul: botón Procesar (acción principal), pestañas e indicadores
+
+[theme.dark]
+primaryColor = "#1E88E5"     # Mismo azul, un poco más claro para que se lea sobre fondo oscuro
 
 [client]
 showErrorDetails = "none"    # Nunca mostrar tracebacks en el navegador (el detalle va a la consola)

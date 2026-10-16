@@ -326,7 +326,7 @@ Reglas:
 
 ### 9.2 Configuración de Streamlit (`.streamlit/config.toml`)
 
-Desactiva estadísticas de uso, limita el servidor a `localhost`, fija `maxUploadSize = 200` MB y define el azul como color principal del tema (botón Procesar). Los botones de descarga se pintan de verde con un bloque de CSS en `app.py` (colores en `core/settings.py`); "Nuevo procesamiento" queda neutro. La aplicación **solo se ejecuta localmente**. No se publica en Streamlit Community Cloud ni en ningún servidor.
+Desactiva estadísticas de uso, limita el servidor a `localhost`, fija `maxUploadSize = 200` MB y define el azul como color principal (botón Procesar) en `[theme.light]` y `[theme.dark]`. No poner colores en `[theme]`: Streamlit lo toma como un tema único y el usuario pierde la opción de modo oscuro. Los botones de descarga se pintan de verde con un bloque de CSS en `app.py` (colores en `core/settings.py`); "Nuevo procesamiento" queda neutro. La aplicación **solo se ejecuta localmente**. No se publica en Streamlit Community Cloud ni en ningún servidor.
 
 ### 9.3 Inicio para el usuario final
 
