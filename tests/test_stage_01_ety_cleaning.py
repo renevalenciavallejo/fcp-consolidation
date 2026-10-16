@@ -77,6 +77,11 @@ def test_any_sheet_name_is_accepted():
     assert run(ety_file(sheet="Hoja1")).summary.rows_read == 1
 
 
+def test_output_keeps_the_original_sheet_name():
+    result = run(ety_file(sheet="sheet1"))
+    assert load_workbook(BytesIO(result.output_bytes)).sheetnames == ["sheet1"]
+
+
 def test_column_order_is_validated():
     header = list(COLUMNS)
     header[4], header[5] = header[5], header[4]  # VR. BRUTO <-> VR. RTEFTE

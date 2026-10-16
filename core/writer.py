@@ -1,16 +1,18 @@
 """Construcción de archivos de Excel con el formato estándar de la herramienta."""
 
+from copy import copy
 from datetime import date, datetime
 from io import BytesIO
 from typing import Any
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill
-from openpyxl.utils import get_column_letter
+from openpyxl.cell.cell import Cell
+from openpyxl.styles import Alignment, Border, Font, PatternFill
+from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from core.audit import Finding, data_columns, is_empty
@@ -46,33 +48,93 @@ class ExcelFormula:
 # Orden de prioridad de las severidades cuando una celda tiene varios hallazgos.
 SEVERITY_PRIORITY = list(SEVERITY_FILLS)
 
+# Formato de número de Excel que equivale a «sin formato».
+GENERAL_FORMAT = "General"
+
+
+@dataclass(frozen=True)
+class CellStyle:
+    """Apariencia de una celda: fuente, relleno, bordes, alineación y formato de número."""
+
+    font: Font
+    fill: PatternFill
+    border: Border
+    alignment: Alignment
+    number_format: str
+
+
+@dataclass
+class SheetStyle:
+    """Apariencia de la hoja original, para repetirla en el archivo de salida.
+
+    Así el usuario ve el archivo procesado igual que el que cargó y se fija solo
+    en los datos. Los estilos se guardan por nombre de columna, porque una etapa
+    puede agregar columnas y correr las demás de posición.
+    """
+
+    sheet_name: str
+    header: dict[str, CellStyle] = field(default_factory=dict)   # Celda del encabezado
+    data: dict[str, CellStyle] = field(default_factory=dict)     # Primera celda de datos
+    widths: dict[str, float] = field(default_factory=dict)       # Ancho de la columna
+
+
+def capture_style(sheet: Worksheet, header_row: int, positions: dict[str, int]) -> SheetStyle:
+    """Toma la apariencia de una hoja: nombre, encabezados, primera fila de datos y anchos.
+
+    `positions` indica la posición (desde 0) de cada columna en la hoja.
+    """
+    widths = _column_widths(sheet)
+    style = SheetStyle(sheet.title)
+    for column, position in positions.items():
+        style.header[column] = _cell_style(sheet.cell(header_row, position + 1))
+        style.data[column] = _cell_style(sheet.cell(header_row + 1, position + 1))
+        if position + 1 in widths:
+            style.widths[column] = widths[position + 1]
+    return style
+
 
 def build_output(
     df: pd.DataFrame,
     findings: list[Finding],
     column_formats: dict[str, str] | None = None,
-    sheet_name: str = "Datos",
+    style: SheetStyle | None = None,
 ) -> bytes:
     """Genera el archivo de salida: datos procesados sin columnas internas.
 
     `column_formats` indica un formato de Excel por columna (por ejemplo, moneda);
     las demás columnas usan el formato según el tipo de valor.
+    `style` es la apariencia del archivo original (nombre de la hoja, encabezados,
+    fuentes y anchos), que se repite en la salida.
     Las celdas con hallazgos se resaltan según la severidad.
     """
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = sheet_name
-    write_table(sheet, df[data_columns(df)], column_formats)
+    sheet.title = style.sheet_name if style else "Datos"
+    write_table(sheet, df[data_columns(df)], column_formats, style)
     _highlight_findings(sheet, df, findings)
     return to_bytes(workbook)
 
 
-def write_table(sheet: Worksheet, df: pd.DataFrame, column_formats: dict[str, str] | None = None) -> None:
-    """Escribe un DataFrame con encabezados en negrita, filtros, paneles inmovilizados y anchos ajustados."""
+def write_table(
+    sheet: Worksheet,
+    df: pd.DataFrame,
+    column_formats: dict[str, str] | None = None,
+    style: SheetStyle | None = None,
+) -> None:
+    """Escribe un DataFrame con filtros, paneles inmovilizados y anchos ajustados.
+
+    Sin `style`, los encabezados van en negrita. Con `style`, cada columna toma la
+    apariencia que tenía en el archivo original; una columna nueva toma la de la
+    columna a su izquierda.
+    """
     columns = list(df.columns)
     sheet.append([str(c) for c in columns])
-    for cell in sheet[1]:
-        cell.font = Font(bold=True)
+    header_styles, data_styles = _styles_by_column(columns, style)
+    for cell, column in zip(sheet[1], columns):
+        if header_styles[column]:
+            _apply_style(cell, header_styles[column])
+        elif style is None:
+            cell.font = Font(bold=True)
 
     letters = {column: get_column_letter(i + 1) for i, column in enumerate(columns)}
     for row_number, values in enumerate(df.itertuples(index=False), start=2):
@@ -82,6 +144,10 @@ def write_table(sheet: Worksheet, df: pd.DataFrame, column_formats: dict[str, st
     formula_formats = _formula_formats(df)
     for row in sheet.iter_rows(min_row=2):
         for cell, column in zip(row, columns):
+            original = data_styles[column]
+            if original:
+                _apply_style(cell, original)
+            # Los formatos que exige una regla (moneda, fórmula, fecha) prevalecen sobre el original.
             if column in formula_formats:
                 if formula_formats[column]:
                     cell.number_format = formula_formats[column]
@@ -91,6 +157,9 @@ def write_table(sheet: Worksheet, df: pd.DataFrame, column_formats: dict[str, st
                 cell.number_format = formats[column]
             elif isinstance(cell.value, (datetime, date)):
                 cell.number_format = DATE_FORMAT_EXCEL
+            elif style and column in style.data and original.number_format != GENERAL_FORMAT:
+                # Formato propio de la columna en el original (no el heredado de su vecina).
+                cell.number_format = original.number_format
             elif isinstance(cell.value, float):
                 cell.number_format = NUMBER_FORMAT_EXCEL
 
@@ -98,6 +167,10 @@ def write_table(sheet: Worksheet, df: pd.DataFrame, column_formats: dict[str, st
         sheet.auto_filter.ref = sheet.dimensions
     sheet.freeze_panes = "A2"
     _adjust_widths(sheet)
+    if style:
+        for i, column in enumerate(columns):
+            if column in style.widths:
+                sheet.column_dimensions[get_column_letter(i + 1)].width = style.widths[column]
 
 
 def to_bytes(workbook: Workbook) -> bytes:
@@ -139,6 +212,50 @@ def _formula_formats(df: pd.DataFrame) -> dict[str, str | None]:
         if first is not None:
             formats[column] = first.number_format
     return formats
+
+
+def _cell_style(cell: Cell) -> CellStyle:
+    return CellStyle(copy(cell.font), copy(cell.fill), copy(cell.border), copy(cell.alignment), cell.number_format)
+
+
+def _apply_style(cell: Cell, style: CellStyle) -> None:
+    """Aplica fuente, relleno, bordes y alineación (el formato de número se decide aparte)."""
+    cell.font = style.font
+    cell.fill = style.fill
+    cell.border = style.border
+    cell.alignment = style.alignment
+
+
+def _styles_by_column(
+    columns: list[str], style: SheetStyle | None
+) -> tuple[dict[str, CellStyle | None], dict[str, CellStyle | None]]:
+    """Estilo de encabezado y de datos de cada columna de salida.
+
+    Una columna que no estaba en el original (por ejemplo, una calculada) toma el
+    estilo de la columna a su izquierda, para que no se vea distinta de las demás.
+    """
+    header: dict[str, CellStyle | None] = {}
+    data: dict[str, CellStyle | None] = {}
+    previous = None
+    for column in columns:
+        if style and column in style.header:
+            previous = column
+        header[column] = style.header.get(previous) if style and previous else None
+        data[column] = style.data.get(previous) if style and previous else None
+    return header, data
+
+
+def _column_widths(sheet: Worksheet) -> dict[int, float]:
+    """Ancho de cada columna con ancho definido. Excel guarda rangos de columnas
+    con el mismo ancho (por ejemplo, E a J), así que se reparten una por una."""
+    widths = {}
+    for letter, dimension in sheet.column_dimensions.items():
+        if not dimension.customWidth or not dimension.width:
+            continue
+        first = dimension.min or column_index_from_string(letter)
+        for number in range(first, (dimension.max or first) + 1):
+            widths[number] = dimension.width
+    return widths
 
 
 def _adjust_widths(sheet: Worksheet) -> None:

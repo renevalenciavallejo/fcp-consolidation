@@ -19,6 +19,7 @@ from core.audit import is_empty
 from core.cleaning import clean_text
 from core.settings import SOURCE_FILE, SOURCE_ROW
 from core.stage import InputSpec
+from core.writer import SheetStyle, capture_style
 
 
 # Cantidad de filas iniciales en las que se buscan encabezados corridos de lugar.
@@ -37,6 +38,8 @@ class ReadResult:
     title_rows: list[tuple[int, dict]] = field(default_factory=list)
     # False si el archivo no se pudo abrir como .xlsx (regla EST-001).
     opened: bool = True
+    # Apariencia de la hoja (nombre, encabezados, fuentes, anchos), para repetirla en la salida.
+    style: SheetStyle | None = None
 
     @property
     def rows(self) -> int:
@@ -76,7 +79,8 @@ def read_file(file: Any, spec: InputSpec) -> ReadResult:
             name, None, [f"[EST-002] {name}: no tiene la hoja '{spec.sheet}'. Hojas encontradas: {sheets}."]
         )
 
-    rows = list(workbook[sheet_name].iter_rows(min_row=1, min_col=1, values_only=True))
+    worksheet = workbook[sheet_name]
+    rows = list(worksheet.iter_rows(min_row=1, min_col=1, values_only=True))
     workbook.close()
 
     header = rows[spec.header_row - 1] if len(rows) >= spec.header_row else ()
@@ -122,6 +126,8 @@ def read_file(file: Any, spec: InputSpec) -> ReadResult:
     if problems:
         return ReadResult(name, None, problems)
 
+    # La hoja sigue disponible después de cerrar el libro (no se abrió en modo solo lectura).
+    style = capture_style(worksheet, spec.header_row, positions)
     columns = list(positions)
     records = []
     for offset, row in enumerate(data_rows):
@@ -129,7 +135,7 @@ def read_file(file: Any, spec: InputSpec) -> ReadResult:
         # Fila real en Excel: la que el usuario puede buscar en su archivo.
         records.append([*record, name, spec.header_row + 1 + offset])
     data = pd.DataFrame(records, columns=[*columns, SOURCE_FILE, SOURCE_ROW], dtype=object)
-    return ReadResult(name, data, [], _title_rows(rows[: spec.header_row - 1], header))
+    return ReadResult(name, data, [], _title_rows(rows[: spec.header_row - 1], header), style=style)
 
 
 def combine(results: list[ReadResult], spec: InputSpec) -> pd.DataFrame:

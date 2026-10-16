@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- El archivo procesado conserva la apariencia del archivo original: nombre de la hoja (antes siempre «Datos»), estilo de los encabezados, fuente y formato de cada columna y anchos. Las columnas nuevas toman el estilo de la columna a su izquierda; los formatos de moneda, fórmulas y fechas que exigen las reglas se mantienen.
 - Etapa 1 – Limpieza del reporte ETY: validación de la estructura del reporte de pagos (primera hoja, encabezados en la fila 4, 24 columnas en orden).
 - Opciones de entrada `sheet: None` (primera hoja, sin validar el nombre) y `check_column_order` (regla EST-008).
 - Si los encabezados de un archivo están en otra fila, el mensaje de error indica en cuál.

@@ -114,6 +114,8 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O) y sin los duplicados del paso 7.
 
+El archivo conserva la apariencia del reporte original: el nombre de la hoja (por ejemplo, «sheet1»), los encabezados en Arial 10 negrita con fondo gris y borde doble, la fuente de los datos y los anchos de columna. La columna Diferencia toma el estilo de Importe. Las fechas se muestran como `dd/mm/aaaa` y las columnas E a K con formato de moneda; además, el encabezado tiene filtros y queda inmovilizado.
+
 ## Tareas manuales
 
 Por definir.

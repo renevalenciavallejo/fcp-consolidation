@@ -137,6 +137,8 @@ Las filas anteriores a los encabezados (títulos del reporte) no forman parte de
 
 Estas columnas permiten que el log siempre apunte al archivo y la fila que el usuario puede buscar. Se eliminan del archivo de salida. Las etapas deben conservarlas en el `DataFrame` que devuelven para que funcione el resaltado de hallazgos.
 
+El lector también guarda la apariencia de la hoja (`ReadResult.style`: nombre, estilos de encabezado y de datos por columna, anchos) para repetirla en el archivo de salida (sección 8.2).
+
 **Valores leídos:** el lector usa openpyxl y entrega cada celda tal como está guardada en Excel (texto, número o fecha nativa), sin inferencia de tipos de pandas (`DataFrame` con `dtype=object`). No se convierte todo a texto porque eso volvería ambiguos los números y fechas nativos (`1.234` o `05/03/2024`). La conversión explícita la hace `convert_columns` según el tipo declarado. Los encabezados se comparan después de limpiar espacios; las filas vacías al final de la hoja se ignoran.
 
 ### 4.3 Contrato de una etapa
@@ -279,7 +281,8 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
 ### 8.2 Archivo de salida
 
 - Contiene los datos procesados con la estructura que espera la etapa siguiente.
-- Formato mínimo: encabezados en negrita, filtros activos, anchos de columna ajustados, fechas como fecha (`dd/mm/aaaa`) y valores como número con separador de miles.
+- **Conserva la apariencia del archivo original** (el primero cargado), para que el usuario se fije solo en los datos: nombre de la hoja, estilo de los encabezados (fuente, relleno, bordes), fuente y formato de número de cada columna y anchos de columna. El lector la guarda en `ReadResult.style` (`core.writer.capture_style`) y el ejecutor se la pasa a `build_output`. Una columna nueva (por ejemplo, una calculada) toma el estilo de la columna a su izquierda y se ajusta su ancho.
+- Además: filtros activos, panel inmovilizado en el encabezado y fechas como fecha (`dd/mm/aaaa`). Los formatos que exige una regla (moneda, fórmulas, fechas) prevalecen sobre el formato original. Sin estilo original (archivos sin formato), los encabezados van en negrita y la hoja se llama «Datos».
 - Las celdas con hallazgos se resaltan con color según severidad (Error: rojo claro, Advertencia: amarillo claro).
 
 ### 8.3 Archivo de log (Excel)

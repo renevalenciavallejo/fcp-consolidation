@@ -21,7 +21,7 @@ from core.log_report import InputFileInfo, RunSummary, build_log
 from core.reader import ReadResult, combine, file_name, read_file
 from core.settings import CURRENCY_FORMAT_EXCEL, OUTPUT_DIR
 from core.stage import input_specs, stage_prefix, stage_rules
-from core.writer import build_output
+from core.writer import SheetStyle, build_output
 
 class StageError(Exception):
     """Problema que impide procesar (estructura inválida, archivos faltantes).
@@ -114,7 +114,7 @@ def run_stage(
     input_files = [
         InputFileInfo(spec.label, r.file_name, r.rows) for spec in specs for r in read_results[spec.key]
     ]
-    output_bytes = build_output(output, audit.findings, output_formats(specs))
+    output_bytes = build_output(output, audit.findings, output_formats(specs), output_style(read_results))
     summary = RunSummary(
         stage_name=stage.NAME,
         started_at=started_at,
@@ -160,6 +160,19 @@ def output_formats(specs: list) -> dict[str, str]:
         for column, column_type in spec.columns.items()
         if column_type == "currency"
     }
+
+
+def output_style(read_results: dict[str, list[ReadResult]]) -> SheetStyle | None:
+    """Apariencia que tendrá el archivo de salida: la del primer archivo cargado.
+
+    Con varios archivos se toma el primero de la primera entrada, que es el que
+    tiene la estructura principal de la etapa.
+    """
+    for results in read_results.values():
+        for result in results:
+            if result.style:
+                return result.style
+    return None
 
 
 def remove_title_rows(read_results: dict[str, list[ReadResult]], audit: AuditLog) -> int:
