@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 0. Estado actual y comandos
 
 - La arquitectura base está construida (`core/`, `app.py`, `cli.py`, pruebas). No inventar etapas ni reglas; esperar la `ESPECIFICACION.md` de cada una.
-- Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Implementados: validación de estructura, eliminación de las filas de título (1 a 3) conversión a moneda de las columnas E a J eliminación de las filas «Distribución Caja» (LIM-101) columna Diferencia con fórmula de Excel (TRA-101), comprobantes repetidos como Advertencia (VAL-101) y orden por Comprobante (TRA-102). Los demás pasos se agregan a medida que se especifican en su `ESPECIFICACION.md`.
+- Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Implementados: validación de estructura, eliminación de las filas de título (1 a 3) conversión a moneda de las columnas E a J eliminación de las filas «Distribución Caja» (LIM-101) columna Diferencia con fórmula de Excel (TRA-101), orden por Comprobante (TRA-102), eliminación de duplicados por Comprobante con Diferencia 0 (DUP-101/102, casos 2.1–2.4; FECHA DE PAGO, Asiento, LNP y Nº Sec Doc no se comparan) y comprobantes que siguen repetidos como Advertencia (VAL-101, después de depurar). Los demás pasos se agregan a medida que se especifican en su `ESPECIFICACION.md`.
 - `tests/stage_99_fake/` es una etapa ficticia que **solo** sirve para probar el núcleo. No registrarla en `STAGES`.
 
 ```bash
@@ -182,7 +182,7 @@ En bloque, para no escribir ciclos celda por celda en las etapas:
 Log de ejecución (lo que el usuario ve en vivo en la interfaz y en la CLI, y la hoja *Ejecución* del log):
 
 - `step(title)`: empieza un paso y cierra el anterior. Al cerrarse, si el paso no tuvo notas, su resultado se calcula solo con lo registrado durante el paso (filas eliminadas, celdas modificadas, hallazgos por severidad, columnas agregadas, transformaciones) o «Sin cambios».
-- `note(text, ok=True)`: resultado escrito a mano (✓ o ✗); lo usa el ejecutor para la verificación y la validación de estructura.
+- `note(text, ok=True)`: resultado escrito a mano (✓ o ✗); lo usa el ejecutor para la verificación y la validación de estructura. Si un paso usa notas, el resumen automático no se agrega: para conservarlo y añadir detalle, llamar primero `audit.note(audit.step_summary())`.
 - `finish_step()`, `steps`, `step_lines()` y `steps_df()`. El ejecutor crea el `AuditLog` con `on_line=progress`, que recibe cada línea apenas se produce. `StageError.steps` tiene el log hasta el error.
 
 Tabla de acciones: `actions` guarda todos los registros (cambios, hallazgos, eliminaciones, columnas agregadas y transformaciones) en el orden en que ocurrieron, con el paso en curso. `actions_df()` los muestra en una sola tabla (Paso, Fila, Acción, Columna, Detalle, Qué hacer, Regla, seguidas de todas las columnas del registro); leída de arriba abajo, permite reconstruir todo lo que se hizo. La columna Archivo solo aparece cuando se procesan varios archivos (`multiple_files`). El registro de un cambio o hallazgo es el original del archivo (el ejecutor lo guarda con `remember_source_rows`); el de una eliminación, el que se guardó al eliminarla. Es la tabla que ve el usuario en la interfaz y la hoja *Acciones* del log.

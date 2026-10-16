@@ -21,6 +21,9 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 - Nueva hoja «Ejecución» en el log de Excel con los mismos pasos. La CLI imprime el mismo log en lugar del resumen de conteos.
 - Las pestañas Hallazgos, Cambios y Eliminados de la interfaz se reemplazan por una sola tabla, «Acciones realizadas», en el orden en que ocurrió cada acción, con el paso, la acción realizada y todas las columnas del registro. La columna Archivo solo aparece cuando se procesan varios archivos. También queda en la nueva hoja «Acciones» del log (las hojas Hallazgos, Cambios y Eliminados se conservan).
 - Los archivos generados conservan el nombre del archivo original y agregan al final `_E01_procesado` o `_E01_log`, sin fecha (antes `E01_ety_cleaning_procesado_<fecha>`). Si ya existe un archivo con ese nombre en `output/`, se agrega `_1`, `_2`, …
+- Etapa 1, paso 7: eliminación de duplicados entre registros con Diferencia 0 (al centavo) y el mismo Comprobante, según los casos 2.1 a 2.4 (reglas DUP-101 y DUP-102). La revisión de comprobantes repetidos (VAL-101) pasa a ejecutarse después, para marcar solo los que siguen repetidos.
+- Etapa 1, paso 7: los casos 2.1 y 2.2 no comparan FECHA DE PAGO (D), Asiento (L), LNP (N) ni Nº Sec Doc (Q); una diferencia solo en esas columnas ya no deja el grupo en el caso 2.4.
+- `AuditLog.step_summary()` (antes privado) para agregar detalle a un paso sin perder su resumen automático.
 - `AuditLog.step`, `note` y `finish_step` para declarar los pasos; el resultado de cada paso se calcula a partir de lo registrado.
 
 ## 0.1.0 – Arquitectura base

@@ -8,16 +8,21 @@ en el orden de ESPECIFICACION.md. Cada regla abre un paso del log de ejecución
 
 import pandas as pd
 
-from core.audit import AuditLog
+from core.audit import AuditLog, data_columns, is_empty
 from core.cleaning import comparable_text, convert_columns, flag_repeated_values, sort_rows
-from core.settings import CURRENCY_FORMAT_EXCEL, WARNING
+from core.settings import CURRENCY_FORMAT_EXCEL, SOURCE_ROW, WARNING
 from core.writer import ExcelFormula
 from stages.stage_01_ety_cleaning.config import (
     AMOUNT_COLUMN,
     CASH_DISTRIBUTION_VALUE,
     DESCRIPTION_COLUMN,
     DIFFERENCE_COLUMN,
+    DIFFERENCE_DECIMALS,
     DIFFERENCE_FORMULA,
+    DIFFERENCE_TERMS,
+    DUPLICATE_BLOCKING_COLUMNS,
+    DUPLICATE_IGNORED_COLUMNS,
+    DUPLICATE_TOLERATED_COLUMNS,
     INPUTS,
     VOUCHER_COLUMN,
 )
@@ -36,10 +41,13 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     df = remove_cash_distribution_rows(df, audit)
     audit.step(f"Agregando la columna {DIFFERENCE_COLUMN}")
     df = add_difference_column(df, audit)
-    audit.step(f"Revisando registros con {VOUCHER_COLUMN} repetido")
-    flag_repeated_vouchers(df, audit)
     audit.step(f"Ordenando por {VOUCHER_COLUMN}")
     df = sort_rows(df, VOUCHER_COLUMN, audit, "TRA-102")
+    audit.step(f"Eliminando registros duplicados por {VOUCHER_COLUMN} (con {DIFFERENCE_COLUMN} 0)")
+    df = remove_duplicate_vouchers(df, audit)
+    # Después de depurar duplicados, para que solo se marquen los que siguen repetidos.
+    audit.step(f"Revisando registros con {VOUCHER_COLUMN} repetido")
+    flag_repeated_vouchers(df, audit)
     return df
 
 
@@ -88,3 +96,92 @@ def flag_repeated_vouchers(df: pd.DataFrame, audit: AuditLog) -> None:
         df, VOUCHER_COLUMN, audit, "VAL-101", WARNING,
         "Revisar si el registro está duplicado",
     )
+
+
+def difference_values(df: pd.DataFrame) -> pd.Series:
+    """Calcula en memoria el valor de la columna Diferencia (VR. BRUTO - ... - Importe).
+
+    En el archivo la columna es una fórmula que Excel calcula al abrirlo; aquí se
+    hace la misma resta, en el mismo orden y sin redondear. Las celdas vacías
+    valen 0, como en Excel. Si algún valor no es número, el resultado es None.
+    """
+    def row_difference(row) -> float | None:
+        values = [0.0 if is_empty(row[c]) else row[c] for c in DIFFERENCE_TERMS]
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in values):
+            return None
+        result = values[0]
+        for value in values[1:]:
+            result -= value
+        return result
+
+    return pd.Series([row_difference(row) for _, row in df.iterrows()], index=df.index, dtype=object)
+
+
+def differing_columns(group: pd.DataFrame, columns: list[str]) -> set[str]:
+    """Columnas en las que no todas las filas del grupo tienen el mismo valor (vacíos iguales entre sí)."""
+    def key(value):
+        return None if is_empty(value) else value
+
+    return {c for c in columns if len({key(v) for v in group[c]}) > 1}
+
+
+def remove_duplicate_vouchers(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
+    """Elimina duplicados entre los registros con Diferencia 0 y el mismo Comprobante. Reglas DUP-101 y DUP-102.
+
+    Diferencia 0 significa que la resta redondeada al centavo da 0 (DIFFERENCE_DECIMALS).
+    Por cada grupo (mismo Comprobante, Diferencia 0, sin importar si las filas
+    están juntas):
+    - 2.1: todas las columnas iguales -> se conserva la primera, se eliminan las demás (DUP-101).
+    - 2.2: solo difieren en Dpto y/o Cd Fnd -> igual (DUP-102).
+    En 2.1 y 2.2 no se comparan FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc
+    (DUPLICATE_IGNORED_COLUMNS); la fila
+    que se conserva mantiene sus propios valores en esas columnas.
+    - 2.3: difieren en Subfideicomiso, Cuenta o Programa -> no se elimina nada.
+    - 2.4: difieren en cualquier otra columna -> no se elimina nada.
+    "La primera" es la que está más arriba en el archivo original (menor fila de origen).
+    No se reordena ni se modifica nada: las filas que quedan conservan su posición.
+    """
+    differences = difference_values(df)
+    # Se compara al centavo: la resta exacta puede dejar residuos que Excel muestra como 0.
+    evaluated = df[[d is not None and round(d, DIFFERENCE_DECIMALS) == 0 for d in differences]]
+    # Diferencia es una fórmula derivada de las demás columnas: no se compara.
+    # Las columnas ignoradas tampoco: pueden variar entre filas que sí son duplicadas.
+    not_compared = {DIFFERENCE_COLUMN, *DUPLICATE_IGNORED_COLUMNS}
+    compared = [c for c in data_columns(df) if c not in not_compared]
+
+    to_remove = pd.Series(False, index=df.index)
+    reasons = pd.Series("", index=df.index, dtype=object)
+    rules = pd.Series("", index=df.index, dtype=object)
+    kept_groups = {"2.3": [], "2.4": []}
+    for voucher, group in evaluated.groupby(VOUCHER_COLUMN, sort=False):
+        if len(group) < 2:
+            continue
+        differing = differing_columns(group, compared)
+        if differing & set(DUPLICATE_BLOCKING_COLUMNS):
+            kept_groups["2.3"].append(voucher)
+            continue
+        if differing - set(DUPLICATE_TOLERATED_COLUMNS):
+            kept_groups["2.4"].append(voucher)
+            continue
+        rule, case = ("DUP-101", "2.1") if not differing else ("DUP-102", "2.2")
+        first = group[SOURCE_ROW].idxmin()
+        for index in group.index.drop(first):
+            to_remove.at[index] = True
+            rules.at[index] = rule
+            reasons.at[index] = (
+                f"Duplicado de la fila {group.at[first, SOURCE_ROW]} "
+                f"({VOUCHER_COLUMN} {voucher}, caso {case})"
+            )
+
+    for rule in ("DUP-101", "DUP-102"):
+        mask = to_remove & (rules == rule)
+        if mask.any():
+            df = audit.remove_rows(df, mask[df.index], rule, reasons[df.index])
+    audit.note(audit.step_summary())
+    for case, label in (("2.3", "difieren en Subfideicomiso, Cuenta o Programa"), ("2.4", "difieren en otras columnas")):
+        if kept_groups[case]:
+            vouchers = ", ".join(str(v) for v in kept_groups[case])
+            count = len(kept_groups[case])
+            groups = "Se conserva 1 grupo" if count == 1 else f"Se conservan {count} grupos"
+            audit.note(f"{groups} porque {label} (caso {case}): {vouchers}")
+    return df

@@ -169,7 +169,7 @@ class AuditLog:
         if self._open_step is None:
             return
         if not self._open_step.details:
-            self.note(self._step_result())
+            self.note(self.step_summary())
         self._open_step = None
 
     def steps_df(self) -> pd.DataFrame:
@@ -202,8 +202,12 @@ class AuditLog:
             "transformations": len(self.transformations),
         }
 
-    def _step_result(self) -> str:
-        """Texto con lo que se registró desde que empezó el paso actual."""
+    def step_summary(self) -> str:
+        """Texto con lo que se registró desde que empezó el paso actual.
+
+        Es el resultado que se pone solo al cerrar un paso sin notas. Una etapa lo
+        puede usar con note() cuando quiere agregar más detalle debajo.
+        """
         start = self._step_start
         changes = self.changes[start["changes"]:]
         findings = self.findings[start["findings"]:]

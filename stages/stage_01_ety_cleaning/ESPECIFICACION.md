@@ -79,9 +79,31 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 | TRA-102 | Los registros se ordenan por Comprobante para que los repetidos queden juntos. El orden es estable (dentro del mismo comprobante se conserva el orden original) y los vacíos irían al final. |
 
 - No se elimina ningún registro: el usuario decide si es un duplicado real.
-- Se cuentan solo los registros que siguen en el archivo (las filas de «Distribución Caja» ya se eliminaron).
+- Se cuentan solo los registros que siguen en el archivo: las filas de «Distribución Caja» y los duplicados del paso 7 ya se eliminaron. Por eso la revisión VAL-101 se ejecuta **después** del paso 7 (el ordenamiento TRA-102 va antes).
 - El ordenamiento queda en la hoja *Resumen* del log («Transformaciones»). La columna *Fila origen* de Hallazgos, Cambios y Eliminados sigue indicando la fila del reporte original.
-- En los reportes de ejemplo: 17 comprobantes repetidos (38 registros) y 18 (36 registros).
+- En los reportes de ejemplo, antes del paso 7 había 17 comprobantes repetidos (38 registros) y 18 (36 registros); después del paso 7 quedan resaltados 22 registros en cada uno.
+
+### Paso 7 – Eliminación de registros duplicados (implementado)
+
+**Alcance:** la única modificación es eliminar filas completas. No se ordena, mueve ni modifica nada más; las filas que se conservan mantienen su posición. La agrupación es solo lógica, en memoria (no se usan agrupaciones, esquemas ni subtotales de Excel).
+
+**Registros que se evalúan:** solo los que tienen **Diferencia 0**. Como la columna Diferencia es una fórmula, la herramienta hace la misma resta en memoria (VR. BRUTO − VR. RTEFTE − VR. RETEIVA − VR. RETEICA − VR. TASAS − Importe) y la compara con 0 **redondeada al centavo**: la resta exacta puede dejar residuos mínimos (por ejemplo 0,0000000019) que Excel muestra como 0. Las demás filas se conservan y no participan.
+
+**Grupos:** registros evaluados con el mismo **Comprobante**, estén o no contiguos. Se comparan todas las columnas del reporte (Diferencia no, porque se deriva de las demás); dos celdas vacías se consideran iguales.
+
+| Caso | Condición | Acción | Código |
+| --- | --- | --- | --- |
+| 2.1 | Todas las filas del grupo son idénticas, sin tener en cuenta FECHA DE PAGO (D), Asiento (L), LNP (N) ni Nº Sec Doc (Q) | Conservar la primera, eliminar las demás | DUP-101 |
+| 2.2 | Solo difieren en Dpto (S) y/o Cd Fnd (T); el resto es igual, sin tener en cuenta FECHA DE PAGO (D), Asiento (L), LNP (N) ni Nº Sec Doc (Q) | Conservar la primera, eliminar las demás | DUP-102 |
+| 2.3 | Difieren en al menos una de Subfideicomiso (U), Cuenta (V) o Programa (Y) | No eliminar ninguna | — |
+| 2.4 | Difieren en cualquier otra columna | No eliminar ninguna | — |
+
+- FECHA DE PAGO (D), Asiento (L), LNP (N) y Nº Sec Doc (Q) no se comparan: una diferencia en esas columnas no lleva el grupo al caso 2.4. La fila que se conserva mantiene sus propios valores en esas columnas (no se modifican ni se combinan con los de las eliminadas).
+- Si un grupo cumple 2.2 y 2.3 a la vez, prevalece 2.3, aunque las demás diferencias estén solo en D, L, N, Q, S o T.
+- «La primera» es la fila del grupo que está más arriba en el **archivo original** (menor fila de origen), aunque el paso 6 haya ordenado la tabla.
+- Un grupo con una sola fila no se modifica.
+- Cada fila eliminada queda en *Eliminados* con el motivo «Duplicado de la fila N (Comprobante X, caso 2.1/2.2)». En el log de ejecución se listan además los comprobantes de los grupos conservados por los casos 2.3 y 2.4.
+- En los reportes de ejemplo se eliminan 9 y 7 filas (todas por el caso 2.2). Los grupos 2.4 que quedan difieren en Proy o Producto (primer reporte) y en FECHA DE PAGO y Nº Sec Doc (segundo reporte).
 
 ### Pasos siguientes (por especificar)
 
@@ -90,7 +112,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 ## Archivo de salida
 
-Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K y ordenados por Comprobante (columna O).
+Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O) y sin los duplicados del paso 7.
 
 ## Tareas manuales
 
