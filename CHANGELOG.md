@@ -4,6 +4,9 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- La etapa se elige en la barra lateral con botones de opción, todas a la vista, en lugar de una lista desplegable.
+- Etapa 2 – Conciliación de pagos: carga y validación de la estructura del archivo procesado en la Etapa 1 (25 columnas en orden, encabezados en la fila 1). Las reglas de conciliación se agregarán a medida que se especifiquen.
+- El nombre de los archivos generados ya no crece cuando el archivo de entrada trae el número de copia (`_E01_procesado_1` o `_E01_procesado (1)`).
 - El log queda con tres hojas: Ejecución, Acciones (la misma tabla «Acciones realizadas» de la interfaz) y Reglas. Se quitan Resumen, Hallazgos, Cambios y Eliminados, cuyo contenido ya está en Acciones.
 - El usuario puede consultar las reglas que aplica la etapa, en orden y con su código: en la interfaz (sección plegable «Reglas que aplica esta etapa») y en la nueva hoja «Reglas» del log. Cada etapa declara el orden en `APPLIED_RULES`.
 - Las reglas de estructura (EST) se describen como lo que se valida.

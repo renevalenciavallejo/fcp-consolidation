@@ -50,8 +50,9 @@ class StageResult:
     log_bytes: bytes
 
 
-# Sufijo que la herramienta agrega a los archivos procesados (por ejemplo "_E01_procesado").
-PROCESSED_SUFFIX = r"_E\d{2}_procesado$"
+# Sufijo que la herramienta agrega a los archivos procesados (por ejemplo "_E01_procesado"),
+# con el número que se agrega cuando ya existe una copia: "_1" en output/ o " (1)" del navegador.
+PROCESSED_SUFFIX = r"_E\d{2}_procesado(_\d+| \(\d+\))?$"
 
 # Recibe cada línea del log de ejecución apenas se produce.
 ProgressCallback = Callable[[str], None]

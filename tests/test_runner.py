@@ -176,6 +176,9 @@ def test_result_names_keep_the_original_file_name():
 def test_result_names_do_not_grow_from_stage_to_stage():
     # El archivo procesado en la etapa 1 entra a la etapa siguiente.
     assert result_file_names(stage_99_fake, ["ETY_sept_E01_procesado.xlsx"])[0] == "ETY_sept_E99_procesado.xlsx"
+    # También si trae el número de copia de output/ o del navegador.
+    assert result_file_names(stage_99_fake, ["ETY_sept_E01_procesado_9.xlsx"])[0] == "ETY_sept_E99_procesado.xlsx"
+    assert result_file_names(stage_99_fake, ["ETY_sept_E01_procesado (2).xlsx"])[0] == "ETY_sept_E99_procesado.xlsx"
     # Si el usuario lo guardó con otro nombre, no se toca.
     assert result_file_names(stage_99_fake, ["ETY_E01_procesado_v2.xlsx"])[0] == "ETY_E01_procesado_v2_E99_procesado.xlsx"
 

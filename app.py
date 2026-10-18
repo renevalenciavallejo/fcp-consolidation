@@ -57,7 +57,8 @@ if not STAGES:
     st.info("Todavía no hay etapas disponibles en esta versión de la herramienta.")
     st.stop()
 
-stage_index = st.sidebar.selectbox(
+# Botones de opción (no lista desplegable): todas las etapas quedan a la vista y se elige con un clic.
+stage_index = st.sidebar.radio(
     "Etapa",
     options=range(len(STAGES)),
     format_func=lambda i: STAGES[i].NAME,

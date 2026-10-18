@@ -1,0 +1,12 @@
+"""Etapa 2 - Conciliación de pagos."""
+
+from stages.stage_02_payment_reconciliation import config
+from stages.stage_02_payment_reconciliation.process import process
+
+NAME = "Etapa 2 - Conciliación de pagos"
+DESCRIPTION = "Valida la estructura del reporte ETY de pagos procesado en la Etapa 1."
+INPUTS = config.INPUTS
+RULES = config.RULES
+APPLIED_RULES = config.APPLIED_RULES
+
+__all__ = ["NAME", "DESCRIPTION", "INPUTS", "RULES", "APPLIED_RULES", "process"]

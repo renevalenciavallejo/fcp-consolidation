@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - La arquitectura base está construida (`core/`, `app.py`, `cli.py`, pruebas). No inventar etapas ni reglas; esperar la `ESPECIFICACION.md` de cada una.
 - Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Implementados: validación de estructura, eliminación de las filas de título (1 a 3) conversión a moneda de las columnas E a J eliminación de las filas «Distribución Caja» (LIM-101) columna Diferencia con fórmula de Excel (TRA-101), orden por Comprobante (TRA-102), eliminación de los comprobantes con VR. BRUTO en 0 entre los registros con Diferencia 0 (LIM-102), eliminación de duplicados por Comprobante con Diferencia 0 (DUP-101/102, casos 2.1–2.4; FECHA DE PAGO, Asiento, LNP y Nº Sec Doc no se comparan) y comprobantes que siguen repetidos como Advertencia (VAL-101, después de depurar). Los demás pasos se agregan a medida que se especifican en su `ESPECIFICACION.md`.
+- `stage_02_payment_reconciliation` (Conciliación de pagos): recibe el archivo procesado en la Etapa 1 (primera hoja, encabezados en la fila 1, las 25 columnas en orden, con Diferencia en la K). Por ahora solo valida la estructura; las reglas de conciliación se agregan a medida que se especifican.
 - `tests/stage_99_fake/` es una etapa ficticia que **solo** sirve para probar el núcleo. No registrarla en `STAGES`.
 
 ```bash
@@ -311,7 +312,7 @@ Solo tres hojas, para que el usuario revise lo mismo que vio en pantalla:
 
 Flujo:
 
-1. **Barra lateral:** nombre y versión de la herramienta, y selección de la etapa (en el orden del proceso).
+1. **Barra lateral:** nombre y versión de la herramienta, y selección de la etapa con botones de opción (todas a la vista, en el orden del proceso; no una lista desplegable).
 2. **Área principal:** nombre y descripción de la etapa, y una sección plegable «Reglas que aplica esta etapa» con las reglas en orden, como lista numerada de texto (sin tabla).
 3. **Un cargador de archivos por cada entrada declarada**, con su etiqueta. Solo acepta `.xlsx` y permite varios archivos cuando la entrada lo indica.
 4. **Botón "Procesar"**, deshabilitado hasta que estén cargadas todas las entradas obligatorias. Cuando hay resultados, a su lado aparecen los botones de descarga y "Nuevo procesamiento". Los mensajes de éxito o error van justo debajo de esta fila.
