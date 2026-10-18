@@ -56,6 +56,10 @@ DIFFERENCE_FORMULA = "={VR. BRUTO}-{VR. RTEFTE}-{VR. RETEIVA}-{VR. RETEICA}-{VR.
 # para revisión y la tabla se ordena por esta columna para que queden juntos.
 VOUCHER_COLUMN = "Comprobante"
 
+# Columna E. Antes del paso 7 se eliminan los registros con Diferencia 0 de un
+# Comprobante cuando esta columna vale 0 (o está vacía) en todos ellos.
+GROSS_AMOUNT_COLUMN = "VR. BRUTO"
+
 # Eliminación de duplicados (paso 7). Solo se evalúan los registros con Diferencia 0,
 # agrupados por VOUCHER_COLUMN. Diferencia se calcula en memoria con estas columnas:
 # la primera menos todas las demás (VR. BRUTO - VR. RTEFTE - ... - Importe).
@@ -67,15 +71,16 @@ DIFFERENCE_DECIMALS = 2
 # entre filas que sí son duplicadas (columnas D, L, N y Q del archivo de salida).
 DUPLICATE_IGNORED_COLUMNS = ["FECHA DE PAGO", "Asiento", "LNP", "Nº Sec Doc"]
 # Caso 2.2: si las filas del grupo solo difieren en estas columnas, se conserva la primera.
-DUPLICATE_TOLERATED_COLUMNS = ["Dpto", "Cd Fnd"]
+DUPLICATE_TOLERATED_COLUMNS = ["Dpto", "Cd Fnd", "Producto"]
 # Caso 2.3: si difieren en alguna de estas, no se elimina ninguna fila del grupo.
 DUPLICATE_BLOCKING_COLUMNS = ["Subfideicomiso", "Cuenta", "Programa"]
 
 # Reglas propias de la etapa. Se usa la serie 1xx para no chocar con las reglas comunes.
 RULES = {
     "LIM-101": "Eliminar las filas con Descripción «Distribución Caja»",
+    "LIM-102": "Eliminar los registros con Diferencia 0 de un Comprobante cuando VR. BRUTO es 0 (o está vacío) en todos ellos",
     "DUP-101": "Eliminar registros idénticos con el mismo Comprobante y Diferencia 0, sin comparar FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc (caso 2.1)",
-    "DUP-102": "Eliminar registros con el mismo Comprobante y Diferencia 0 que solo difieren en Dpto y/o Cd Fnd, sin comparar FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc (caso 2.2)",
+    "DUP-102": "Eliminar registros con el mismo Comprobante y Diferencia 0 que solo difieren en Dpto, Cd Fnd y/o Producto, sin comparar FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc (caso 2.2)",
     "VAL-101": "Identificar los registros con Comprobante repetido",
     "TRA-102": "Ordenar los registros por Comprobante",
     "TRA-101": "Agregar la columna Diferencia: VR. BRUTO - VR. RTEFTE - VR. RETEIVA - VR. RETEICA - VR. TASAS - Importe",

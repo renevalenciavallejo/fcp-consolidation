@@ -23,6 +23,7 @@ from stages.stage_01_ety_cleaning.config import (
     DUPLICATE_BLOCKING_COLUMNS,
     DUPLICATE_IGNORED_COLUMNS,
     DUPLICATE_TOLERATED_COLUMNS,
+    GROSS_AMOUNT_COLUMN,
     INPUTS,
     VOUCHER_COLUMN,
 )
@@ -43,6 +44,8 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     df = add_difference_column(df, audit)
     audit.step(f"Ordenando por {VOUCHER_COLUMN}")
     df = sort_rows(df, VOUCHER_COLUMN, audit, "TRA-102")
+    audit.step(f"Eliminando los comprobantes con {GROSS_AMOUNT_COLUMN} en 0 (con {DIFFERENCE_COLUMN} 0)")
+    df = remove_zero_gross_vouchers(df, audit)
     audit.step(f"Eliminando registros duplicados por {VOUCHER_COLUMN} (con {DIFFERENCE_COLUMN} 0)")
     df = remove_duplicate_vouchers(df, audit)
     # Después de depurar duplicados, para que solo se marquen los que siguen repetidos.
@@ -117,6 +120,42 @@ def difference_values(df: pd.DataFrame) -> pd.Series:
     return pd.Series([row_difference(row) for _, row in df.iterrows()], index=df.index, dtype=object)
 
 
+def zero_difference(df: pd.DataFrame) -> pd.Series:
+    """True en los registros cuya Diferencia es 0 al centavo (DIFFERENCE_DECIMALS).
+
+    Se compara al centavo porque la resta exacta puede dejar residuos que Excel
+    muestra como 0. Si la Diferencia no se puede calcular, el registro no cuenta.
+    """
+    return pd.Series(
+        [d is not None and round(d, DIFFERENCE_DECIMALS) == 0 for d in difference_values(df)],
+        index=df.index,
+        dtype=bool,   # Con la tabla vacía, pandas tomaría la máscara como una lista de columnas
+    )
+
+
+def remove_zero_gross_vouchers(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
+    """Elimina los registros con Diferencia 0 de un Comprobante cuando VR. BRUTO es 0
+    en todos ellos. Regla LIM-102.
+
+    Se agrupa por Comprobante (estén o no juntas las filas) y solo entre los
+    registros con Diferencia 0; los demás se conservan. Un comprobante de una sola
+    fila también cuenta. Una celda vacía vale 0, como en la fórmula de Diferencia;
+    un valor que no es número no tiene Diferencia, así que no llega a evaluarse.
+    """
+    evaluated = df[zero_difference(df)]
+    to_remove = pd.Series(False, index=df.index)
+    reasons = pd.Series("", index=df.index, dtype=object)
+    for voucher, group in evaluated.groupby(VOUCHER_COLUMN, sort=False):
+        if not all(is_empty(v) or v == 0 for v in group[GROSS_AMOUNT_COLUMN]):
+            continue
+        records = "el registro" if len(group) == 1 else f"los {len(group)} registros"
+        to_remove[group.index] = True
+        reasons[group.index] = (
+            f"{GROSS_AMOUNT_COLUMN} en 0 en {records} del {VOUCHER_COLUMN} {voucher} con {DIFFERENCE_COLUMN} 0"
+        )
+    return audit.remove_rows(df, to_remove, "LIM-102", reasons)
+
+
 def differing_columns(group: pd.DataFrame, columns: list[str]) -> set[str]:
     """Columnas en las que no todas las filas del grupo tienen el mismo valor (vacíos iguales entre sí)."""
     def key(value):
@@ -132,7 +171,7 @@ def remove_duplicate_vouchers(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame
     Por cada grupo (mismo Comprobante, Diferencia 0, sin importar si las filas
     están juntas):
     - 2.1: todas las columnas iguales -> se conserva la primera, se eliminan las demás (DUP-101).
-    - 2.2: solo difieren en Dpto y/o Cd Fnd -> igual (DUP-102).
+    - 2.2: solo difieren en Dpto, Cd Fnd y/o Producto -> igual (DUP-102).
     En 2.1 y 2.2 no se comparan FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc
     (DUPLICATE_IGNORED_COLUMNS); la fila
     que se conserva mantiene sus propios valores en esas columnas.
@@ -141,9 +180,7 @@ def remove_duplicate_vouchers(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame
     "La primera" es la que está más arriba en el archivo original (menor fila de origen).
     No se reordena ni se modifica nada: las filas que quedan conservan su posición.
     """
-    differences = difference_values(df)
-    # Se compara al centavo: la resta exacta puede dejar residuos que Excel muestra como 0.
-    evaluated = df[[d is not None and round(d, DIFFERENCE_DECIMALS) == 0 for d in differences]]
+    evaluated = df[zero_difference(df)]
     # Diferencia es una fórmula derivada de las demás columnas: no se compara.
     # Las columnas ignoradas tampoco: pueden variar entre filas que sí son duplicadas.
     not_compared = {DIFFERENCE_COLUMN, *DUPLICATE_IGNORED_COLUMNS}

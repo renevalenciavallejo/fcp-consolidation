@@ -275,12 +275,14 @@ def test_step_log_shows_each_rule():
         "▸ Eliminando las filas con Descripción «Distribución Caja»",
         "▸ Agregando la columna Diferencia",
         "▸ Ordenando por Comprobante",
+        "▸ Eliminando los comprobantes con VR. BRUTO en 0 (con Diferencia 0)",
         "▸ Eliminando registros duplicados por Comprobante (con Diferencia 0)",
         "▸ Revisando registros con Comprobante repetido",
         "▸ Generando el archivo de salida y el log",
     ]
     assert "   ✓ 1 fila eliminada: fila 6" in lines   # Distribución Caja
     assert "   ✓ 1 fila eliminada: fila 7" in lines   # Duplicado de la fila 5
+    assert lines[lines.index("▸ Eliminando los comprobantes con VR. BRUTO en 0 (con Diferencia 0)") + 1] == "   ✓ Sin cambios"
     # Después de depurar, el comprobante ya no está repetido.
     assert lines[lines.index("▸ Revisando registros con Comprobante repetido") + 1] == "   ✓ Sin cambios"
 
@@ -330,6 +332,15 @@ def test_case_2_1_identical_rows_keep_the_first():
 def test_case_2_2_only_dpto_or_cd_fnd_differ():
     _, removed = dedup_run(with_voucher("1"), with_voucher("1", Dpto="99999", Cd_Fnd="99-99"))
     assert removed == [(6, "DUP-102")]
+
+
+def test_case_2_2_producto_is_also_tolerated():
+    _, removed = dedup_run(
+        with_voucher("1"), with_voucher("1", Dpto="47002"), with_voucher("1", Dpto="47006", Producto="204702"),
+    )
+    assert removed == [(6, "DUP-102"), (7, "DUP-102")]
+    _, removed = dedup_run(with_voucher("1"), with_voucher("1", Producto="204702", Programa="X"))
+    assert removed == []   # 2.3 prevalece
 
 
 def test_case_2_3_blocking_columns_keep_all():
@@ -424,3 +435,52 @@ def test_ignored_columns_do_not_override_case_2_3_or_2_4():
     assert removed == []   # 2.3 prevalece
     _, removed = dedup_run(with_voucher("1"), with_voucher("1", Proy="X", **IGNORED))
     assert removed == []   # La diferencia en Proy sigue siendo 2.4
+
+
+# --- Comprobantes con VR. BRUTO en 0 (LIM-102) ----------------------------------
+
+
+def zero_gross(voucher, **changes):
+    """Fila con VR. BRUTO en 0 y los demás valores en 0, para que la Diferencia sea 0."""
+    zeros = {"VR. BRUTO": 0, "VR. RETEICA": 0, "Importe": 0}
+    return with_voucher(voucher, **{**zeros, **changes})
+
+
+def zero_gross_removed(result):
+    return [(r.source_row, r.rule) for r in result.audit.removals if r.rule == "LIM-102"]
+
+
+def test_voucher_with_zero_gross_amount_in_all_rows_is_removed():
+    result = run(ety_file(rows=(zero_gross("1"), with_voucher("2"), zero_gross("1", Proy="X"))))
+    assert zero_gross_removed(result) == [(5, "LIM-102"), (7, "LIM-102")]
+    assert result.audit.removals[-1].reason == "VR. BRUTO en 0 en los 2 registros del Comprobante 1 con Diferencia 0"
+    assert [r["Comprobante"] for r in output_rows(result)] == ["2"]
+
+
+def test_voucher_with_a_single_zero_gross_row_is_removed():
+    result = run(ety_file(rows=(zero_gross("1"), with_voucher("2"))))
+    assert zero_gross_removed(result) == [(5, "LIM-102")]
+    assert result.audit.removals[-1].reason == "VR. BRUTO en 0 en el registro del Comprobante 1 con Diferencia 0"
+
+
+def test_empty_gross_amount_counts_as_zero():
+    result = run(ety_file(rows=(zero_gross("1", **{"VR. BRUTO": None}), zero_gross("1"))))
+    assert zero_gross_removed(result) == [(5, "LIM-102"), (6, "LIM-102")]
+
+
+def test_voucher_with_some_gross_amount_is_kept():
+    result = run(ety_file(rows=(zero_gross("1"), with_voucher("1", Proy="X"))))
+    assert zero_gross_removed(result) == []
+    assert len(output_rows(result)) == 2
+
+
+def test_rows_with_non_zero_difference_are_not_evaluated():
+    unbalanced = zero_gross("1", Importe=-5000)   # VR. BRUTO 0 pero Diferencia 5000: se conserva
+    result = run(ety_file(rows=(zero_gross("1"), unbalanced)))
+    assert zero_gross_removed(result) == [(5, "LIM-102")]
+    assert [r["Importe"] for r in output_rows(result)] == [-5000]
+
+
+def test_zero_gross_rule_runs_before_duplicates():
+    result = run(ety_file(rows=(zero_gross("1"), zero_gross("1"))))   # También sería caso 2.1
+    assert [(r.source_row, r.rule) for r in result.audit.removals[3:]] == [(5, "LIM-102"), (6, "LIM-102")]

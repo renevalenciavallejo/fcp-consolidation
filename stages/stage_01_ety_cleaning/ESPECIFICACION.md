@@ -81,7 +81,21 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 - No se elimina ningún registro: el usuario decide si es un duplicado real.
 - Se cuentan solo los registros que siguen en el archivo: las filas de «Distribución Caja» y los duplicados del paso 7 ya se eliminaron. Por eso la revisión VAL-101 se ejecuta **después** del paso 7 (el ordenamiento TRA-102 va antes).
 - El ordenamiento queda en la hoja *Resumen* del log («Transformaciones»). La columna *Fila origen* de Hallazgos, Cambios y Eliminados sigue indicando la fila del reporte original.
-- En los reportes de ejemplo, antes del paso 7 había 17 comprobantes repetidos (38 registros) y 18 (36 registros); después del paso 7 quedan resaltados 22 registros en cada uno.
+- En los reportes de ejemplo, antes del paso 7 había 17 comprobantes repetidos (38 registros) y 18 (36 registros); después de la regla LIM-102 y del paso 7 quedan resaltados 14 registros en cada uno.
+
+### Antes del paso 7 – Eliminar los comprobantes con VR. BRUTO en 0 (implementado)
+
+| Código | Regla |
+| --- | --- |
+| LIM-102 | Entre los registros con **Diferencia 0**, si todos los de un mismo **Comprobante** tienen VR. BRUTO (columna E) en 0, se eliminan todos. |
+
+- Se aplica después de quitar las filas de «Distribución Caja» y antes de buscar duplicados (paso 7), así que esos registros ya no se evalúan como duplicados.
+- Diferencia 0 se decide igual que en el paso 7 (resta en memoria, redondeada al centavo). Los registros con Diferencia distinta de 0 no se evalúan y se conservan, aunque su VR. BRUTO sea 0.
+- Los registros de un comprobante se agrupan estén o no contiguos. Un comprobante con un solo registro también se elimina si su VR. BRUTO es 0.
+- Una celda vacía en VR. BRUTO cuenta como 0, igual que en la fórmula de Diferencia. Un valor que no es número no tiene Diferencia, así que no se evalúa.
+- Si al menos un registro del grupo tiene VR. BRUTO distinto de 0, se conserva todo el grupo.
+- Cada fila eliminada queda en *Eliminados* con el motivo «VR. BRUTO en 0 en los N registros del Comprobante X con Diferencia 0».
+- En los reportes de ejemplo: en el primero (…38426564) se eliminan 4 filas, de los comprobantes 00158073 y 00158074, que antes quedaban en el caso 2.4; en el segundo (…38393197) no hay ninguno.
 
 ### Paso 7 – Eliminación de registros duplicados (implementado)
 
@@ -94,16 +108,16 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 | Caso | Condición | Acción | Código |
 | --- | --- | --- | --- |
 | 2.1 | Todas las filas del grupo son idénticas, sin tener en cuenta FECHA DE PAGO (D), Asiento (L), LNP (N) ni Nº Sec Doc (Q) | Conservar la primera, eliminar las demás | DUP-101 |
-| 2.2 | Solo difieren en Dpto (S) y/o Cd Fnd (T); el resto es igual, sin tener en cuenta FECHA DE PAGO (D), Asiento (L), LNP (N) ni Nº Sec Doc (Q) | Conservar la primera, eliminar las demás | DUP-102 |
+| 2.2 | Solo difieren en Dpto (S), Cd Fnd (T) y/o Producto (X); el resto es igual, sin tener en cuenta FECHA DE PAGO (D), Asiento (L), LNP (N) ni Nº Sec Doc (Q) | Conservar la primera, eliminar las demás | DUP-102 |
 | 2.3 | Difieren en al menos una de Subfideicomiso (U), Cuenta (V) o Programa (Y) | No eliminar ninguna | — |
 | 2.4 | Difieren en cualquier otra columna | No eliminar ninguna | — |
 
 - FECHA DE PAGO (D), Asiento (L), LNP (N) y Nº Sec Doc (Q) no se comparan: una diferencia en esas columnas no lleva el grupo al caso 2.4. La fila que se conserva mantiene sus propios valores en esas columnas (no se modifican ni se combinan con los de las eliminadas).
-- Si un grupo cumple 2.2 y 2.3 a la vez, prevalece 2.3, aunque las demás diferencias estén solo en D, L, N, Q, S o T.
+- Si un grupo cumple 2.2 y 2.3 a la vez, prevalece 2.3, aunque las demás diferencias estén solo en D, L, N, Q, S, T o X.
 - «La primera» es la fila del grupo que está más arriba en el **archivo original** (menor fila de origen), aunque el paso 6 haya ordenado la tabla.
 - Un grupo con una sola fila no se modifica.
 - Cada fila eliminada queda en *Eliminados* con el motivo «Duplicado de la fila N (Comprobante X, caso 2.1/2.2)». En el log de ejecución se listan además los comprobantes de los grupos conservados por los casos 2.3 y 2.4.
-- En los reportes de ejemplo se eliminan 9 y 7 filas (todas por el caso 2.2). Los grupos 2.4 que quedan difieren en Proy o Producto (primer reporte) y en FECHA DE PAGO y Nº Sec Doc (segundo reporte).
+- En los reportes de ejemplo se eliminan 12 filas (…38426564) y 11 filas (…38393197). Ya no queda ningún grupo en el caso 2.4: el comprobante 00158196, que difiere en Dpto y Producto, pasa al caso 2.2 (se conserva la fila 407 y se eliminan la 408, la 409 y la 410).
 
 ### Pasos siguientes (por especificar)
 
@@ -112,7 +126,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 ## Archivo de salida
 
-Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O) y sin los duplicados del paso 7.
+Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O), sin los comprobantes con VR. BRUTO en 0 (LIM-102) y sin los duplicados del paso 7.
 
 El archivo conserva la apariencia del reporte original: el nombre de la hoja (por ejemplo, «sheet1»), los encabezados en Arial 10 negrita con fondo gris y borde doble, la fuente de los datos y los anchos de columna. La columna Diferencia toma el estilo de Importe. Las fechas se muestran como `dd/mm/aaaa` y las columnas E a K con formato de moneda; además, el encabezado tiene filtros y queda inmovilizado.
 
