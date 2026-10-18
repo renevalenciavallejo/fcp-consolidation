@@ -149,7 +149,7 @@ def combine(results: list[ReadResult], spec: InputSpec) -> pd.DataFrame:
 def _title_rows(rows: list[tuple], header: tuple) -> list[tuple[int, dict]]:
     """Contenido de las filas de título, en la columna de Excel donde está cada valor.
 
-    Se usa el nombre del encabezado de esa columna para que en la hoja Eliminados
+    Se usa el nombre del encabezado de esa columna para que en la hoja Acciones
     cada valor aparezca bajo la misma columna que tiene en el archivo original.
     """
     result = []

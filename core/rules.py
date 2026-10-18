@@ -5,15 +5,16 @@ de cada etapa se declaran en el `config.py` de la etapa, en el diccionario RULES
 """
 
 # Reglas de estructura: si fallan, el procesamiento se detiene sin generar resultados.
+# Se describen como lo que se valida, porque así aparecen en la lista de reglas de la etapa.
 STRUCTURE_RULES = {
-    "EST-001": "El archivo no se pudo abrir como Excel (.xlsx)",
-    "EST-002": "La hoja esperada no existe en el archivo",
-    "EST-003": "Faltan columnas obligatorias",
-    "EST-004": "El archivo tiene columnas que no se esperaban",
-    "EST-005": "Hay encabezados repetidos",
-    "EST-006": "Hay una columna con datos pero sin encabezado",
-    "EST-007": "Falta una entrada obligatoria o sobran archivos",
-    "EST-008": "Las columnas no están en el orden esperado",
+    "EST-001": "Validar que el archivo se pueda abrir como Excel (.xlsx)",
+    "EST-002": "Validar que exista la hoja esperada",
+    "EST-003": "Validar que estén todas las columnas obligatorias",
+    "EST-004": "Validar que no haya columnas que no se esperaban",
+    "EST-005": "Validar que no haya encabezados repetidos",
+    "EST-006": "Validar que no haya columnas con datos y sin encabezado",
+    "EST-007": "Validar que se carguen los archivos obligatorios y no sobren archivos",
+    "EST-008": "Validar que las columnas estén en el orden esperado",
 }
 
 # Reglas comunes que sí quedan registradas en el log.

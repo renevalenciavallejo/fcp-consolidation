@@ -39,7 +39,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 | Código | Regla |
 | --- | --- |
-| LIM-003 | Se eliminan las filas 1, 2 y 3 (título «Todos Pagos X Comprobante», cantidad de registros y rango de fechas). Quedan en la hoja *Eliminados* del log, con su contenido en la columna donde estaba cada valor. No cuentan como registros eliminados. |
+| LIM-003 | Se eliminan las filas 1, 2 y 3 (título «Todos Pagos X Comprobante», cantidad de registros y rango de fechas). Quedan en la hoja *Acciones* del log, con su contenido en la columna donde estaba cada valor. No cuentan como registros eliminados. |
 
 ### Paso 3 – Convertir a moneda las columnas E a J (implementado)
 
@@ -57,7 +57,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 | --- | --- |
 | LIM-101 | Se eliminan las filas cuya columna L (Descripción) es «Distribución Caja». La comparación no tiene en cuenta mayúsculas, tildes ni espacios sobrantes. |
 
-- Cada fila eliminada queda en la hoja *Eliminados* del log con todos sus datos y el motivo «Descripción «Distribución Caja»».
+- Cada fila eliminada queda en la hoja *Acciones* del log con todos sus datos y el motivo «Descripción «Distribución Caja»».
 - En los reportes de ejemplo, la columna L solo tiene «Cuentas a Pagar» y «Distribución Caja»; después de este paso quedan solo las filas de «Cuentas a Pagar».
 
 ### Paso 5 – Agregar la columna Diferencia (implementado)
@@ -68,19 +68,19 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 - El objetivo es identificar los registros con un valor diferente de 0: el usuario filtra la columna en Excel. La herramienta no genera hallazgos por este paso.
 - La fórmula es exacta (sin redondeo). Por la forma en que Excel guarda los decimales, algunos registros que cuadran al centavo pueden mostrar un residuo mínimo (por ejemplo, 0,0000000001) y aparecer como diferentes de 0 al filtrar.
-- La columna queda registrada en la hoja *Resumen* del log («Columnas agregadas»), no celda por celda.
+- La columna queda registrada una sola vez en la hoja *Acciones* del log («Columna agregada»), no celda por celda.
 - Desde este paso, las columnas que estaban de la K en adelante (Asiento … Programa) se corren una posición a la derecha.
 
 ### Paso 6 – Identificar comprobantes repetidos y ordenar (implementado)
 
 | Código | Regla |
 | --- | --- |
-| VAL-101 | Cada registro cuyo **Comprobante** (columna O del archivo de salida) se repite en otro registro se señala como **Advertencia**: la celda queda resaltada en amarillo y el registro aparece en la hoja *Hallazgos* («Comprobante repetido en N registros», acción sugerida «Revisar si el registro está duplicado»). |
+| VAL-101 | Cada registro cuyo **Comprobante** (columna O del archivo de salida) se repite en otro registro se señala como **Advertencia**: la celda queda resaltada en amarillo y el hallazgo aparece en la hoja *Acciones* («Comprobante repetido en N registros», acción sugerida «Revisar si el registro está duplicado»). |
 | TRA-102 | Los registros se ordenan por Comprobante para que los repetidos queden juntos. El orden es estable (dentro del mismo comprobante se conserva el orden original) y los vacíos irían al final. |
 
 - No se elimina ningún registro: el usuario decide si es un duplicado real.
 - Se cuentan solo los registros que siguen en el archivo: las filas de «Distribución Caja» y los duplicados del paso 7 ya se eliminaron. Por eso la revisión VAL-101 se ejecuta **después** del paso 7 (el ordenamiento TRA-102 va antes).
-- El ordenamiento queda en la hoja *Resumen* del log («Transformaciones»). La columna *Fila origen* de Hallazgos, Cambios y Eliminados sigue indicando la fila del reporte original.
+- El ordenamiento queda en la hoja *Acciones* del log («Transformación»). La columna *Fila* sigue indicando la fila del reporte original.
 - En los reportes de ejemplo, antes del paso 7 había 17 comprobantes repetidos (38 registros) y 18 (36 registros); después de la regla LIM-102 y del paso 7 quedan resaltados 14 registros en cada uno.
 
 ### Antes del paso 7 – Eliminar los comprobantes con VR. BRUTO en 0 (implementado)
@@ -94,7 +94,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 - Los registros de un comprobante se agrupan estén o no contiguos. Un comprobante con un solo registro también se elimina si su VR. BRUTO es 0.
 - Una celda vacía en VR. BRUTO cuenta como 0, igual que en la fórmula de Diferencia. Un valor que no es número no tiene Diferencia, así que no se evalúa.
 - Si al menos un registro del grupo tiene VR. BRUTO distinto de 0, se conserva todo el grupo.
-- Cada fila eliminada queda en *Eliminados* con el motivo «VR. BRUTO en 0 en los N registros del Comprobante X con Diferencia 0».
+- Cada fila eliminada queda en la hoja *Acciones* con el motivo «VR. BRUTO en 0 en los N registros del Comprobante X con Diferencia 0».
 - En los reportes de ejemplo: en el primero (…38426564) se eliminan 4 filas, de los comprobantes 00158073 y 00158074, que antes quedaban en el caso 2.4; en el segundo (…38393197) no hay ninguno.
 
 ### Paso 7 – Eliminación de registros duplicados (implementado)
@@ -116,7 +116,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 - Si un grupo cumple 2.2 y 2.3 a la vez, prevalece 2.3, aunque las demás diferencias estén solo en D, L, N, Q, S, T o X.
 - «La primera» es la fila del grupo que está más arriba en el **archivo original** (menor fila de origen), aunque el paso 6 haya ordenado la tabla.
 - Un grupo con una sola fila no se modifica.
-- Cada fila eliminada queda en *Eliminados* con el motivo «Duplicado de la fila N (Comprobante X, caso 2.1/2.2)». En el log de ejecución se listan además los comprobantes de los grupos conservados por los casos 2.3 y 2.4.
+- Cada fila eliminada queda en la hoja *Acciones* con el motivo «Duplicado de la fila N (Comprobante X, caso 2.1/2.2)». En el log de ejecución se listan además los comprobantes de los grupos conservados por los casos 2.3 y 2.4.
 - En los reportes de ejemplo se eliminan 12 filas (…38426564) y 11 filas (…38393197). Ya no queda ningún grupo en el caso 2.4: el comprobante 00158196, que difiere en Dpto y Producto, pasa al caso 2.2 (se conserva la fila 407 y se eliminan la 408, la 409 y la 410).
 
 ### Pasos siguientes (por especificar)

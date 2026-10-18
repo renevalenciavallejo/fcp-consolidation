@@ -414,8 +414,8 @@ def sort_rows(df: pd.DataFrame, column: str, audit: AuditLog, rule: str) -> pd.D
     """Ordena los registros por `column` (como texto). Los vacíos quedan al final.
 
     El orden es estable: los registros con el mismo valor conservan el orden en
-    que venían. Se registra como transformación en el Resumen del log; la fila
-    de origen de cada registro se sigue viendo en Hallazgos, Cambios y Eliminados.
+    que venían. Se registra como transformación en la hoja Acciones del log; la
+    fila de origen de cada registro se sigue viendo en la columna Fila.
     """
     keys = df[column].map(lambda value: normalize_code(value) or "")
     order = sorted(range(len(df)), key=lambda i: (keys.iat[i] == "", keys.iat[i]))

@@ -4,6 +4,10 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- El log queda con tres hojas: Ejecución, Acciones (la misma tabla «Acciones realizadas» de la interfaz) y Reglas. Se quitan Resumen, Hallazgos, Cambios y Eliminados, cuyo contenido ya está en Acciones.
+- El usuario puede consultar las reglas que aplica la etapa, en orden y con su código: en la interfaz (sección plegable «Reglas que aplica esta etapa») y en la nueva hoja «Reglas» del log. Cada etapa declara el orden en `APPLIED_RULES`.
+- Las reglas de estructura (EST) se describen como lo que se valida.
+- Etapa 1: la descripción y la etiqueta de carga ya no incluyen «(Todos Pagos X Comprobante)»; la descripción enumera las reglas aplicadas.
 - Etapa 1, paso 7: Producto (X) se suma a Dpto y Cd Fnd como diferencia aceptada en el caso 2.2.
 - Etapa 1: antes de buscar duplicados se eliminan los registros con Diferencia 0 de un Comprobante cuando VR. BRUTO es 0 (o está vacío) en todos ellos (regla LIM-102).
 - El archivo procesado conserva la apariencia del archivo original: nombre de la hoja (antes siempre «Datos»), estilo de los encabezados, fuente y formato de cada columna y anchos. Las columnas nuevas toman el estilo de la columna a su izquierda; los formatos de moneda, fórmulas y fechas que exigen las reglas se mantienen.

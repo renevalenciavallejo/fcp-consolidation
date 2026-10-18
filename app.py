@@ -9,7 +9,7 @@ import streamlit as st
 from core.errors import UNEXPECTED_ERROR_MESSAGE, log_exception
 from core.runner import StageError, run_stage, save_result
 from core.settings import APP_NAME, APP_VERSION, DOWNLOAD_BUTTON_COLOR, DOWNLOAD_BUTTON_HOVER_COLOR
-from core.stage import input_specs
+from core.stage import applied_rules, input_specs
 from stages import STAGES
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -69,6 +69,13 @@ stage = STAGES[stage_index]
 
 st.title(stage.NAME)
 st.write(stage.DESCRIPTION)
+with st.expander("Reglas que aplica esta etapa"):
+    st.caption("En el orden en que se aplican. Los códigos son los mismos que aparecen en el log.")
+    # Lista numerada en texto (no tabla): dentro de la sección se lee mejor sin bordes.
+    st.markdown("\n".join(
+        f"{number}. **{code}** · {description}"
+        for number, (code, description) in enumerate(applied_rules(stage), start=1)
+    ))
 
 files = {}
 for spec in input_specs(stage):

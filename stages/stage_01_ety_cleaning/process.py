@@ -65,7 +65,7 @@ def convert_currency_columns(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
 def remove_cash_distribution_rows(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
     """Elimina las filas con Descripción «Distribución Caja» (columna L). Regla LIM-101.
 
-    Cada eliminada queda en la hoja Eliminados del log con todos sus datos.
+    Cada eliminada queda en la hoja Acciones del log con todos sus datos.
     """
     target = comparable_text(CASH_DISTRIBUTION_VALUE)
     is_cash_distribution = df[DESCRIPTION_COLUMN].map(lambda value: comparable_text(value) == target)
@@ -93,7 +93,7 @@ def flag_repeated_vouchers(df: pd.DataFrame, audit: AuditLog) -> None:
     """Señala como Advertencia los registros con Comprobante repetido (columna O). Regla VAL-101.
 
     No elimina registros: el usuario revisa si son duplicados reales. La celda
-    queda resaltada en amarillo y el registro aparece en la hoja Hallazgos.
+    queda resaltada en amarillo y el hallazgo aparece en la hoja Acciones del log.
     """
     flag_repeated_values(
         df, VOUCHER_COLUMN, audit, "VAL-101", WARNING,

@@ -265,7 +265,7 @@ class AuditLog:
         """Registra que se agregó una columna calculada.
 
         Se registra una vez por columna (no celda por celda) y aparece en la hoja
-        Resumen del log, con la regla y la cantidad de filas.
+        Acciones del log, con la regla y la cantidad de filas.
         """
         self._check_rule(rule)
         item = AddedColumn(column, rule, rows)
@@ -274,7 +274,7 @@ class AuditLog:
 
     def transformation(self, rule: str, detail: str) -> None:
         """Registra una transformación que afecta toda la tabla y no celdas puntuales
-        (por ejemplo, ordenar los registros). Aparece en la hoja Resumen del log."""
+        (por ejemplo, ordenar los registros). Aparece en la hoja Acciones del log."""
         self._check_rule(rule)
         item = Transformation(rule, detail)
         self.transformations.append(item)
@@ -502,7 +502,7 @@ def _plural(count: int, singular: str, plural: str) -> str:
 def _rows_text(removals: list[Removal], with_file: bool) -> str:
     """Filas eliminadas como texto («filas 1, 2 y 3»), agrupadas por archivo si `with_file`.
 
-    Se listan como máximo MAX_ROWS_LISTED filas; el detalle completo está en Eliminados.
+    Se listan como máximo MAX_ROWS_LISTED filas; el detalle completo está en la hoja Acciones.
     """
     by_file: dict[str, list[int]] = {}
     for removal in removals:

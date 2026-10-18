@@ -1,4 +1,4 @@
-"""Construcción del archivo de log en Excel (Resumen, Ejecución, Acciones, Hallazgos, Cambios, Eliminados)."""
+"""Construcción del archivo de log en Excel (Ejecución, Acciones, Reglas)."""
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -7,7 +7,6 @@ import pandas as pd
 from openpyxl import Workbook
 
 from core.audit import AuditLog
-from core.settings import APP_NAME, APP_VERSION, DATE_FORMAT_TEXT
 from core.writer import to_bytes, write_table
 
 
@@ -22,7 +21,7 @@ class InputFileInfo:
 
 @dataclass
 class RunSummary:
-    """Datos generales de un procesamiento, para la hoja Resumen y la interfaz."""
+    """Datos generales de un procesamiento, para la interfaz y la línea de comandos."""
 
     stage_name: str
     started_at: datetime
@@ -36,18 +35,18 @@ class RunSummary:
     rule_counts: dict[str, int]
     input_files: list[InputFileInfo] = field(default_factory=list)
     title_rows_removed: int = 0    # Filas de título anteriores a los encabezados
+    # Reglas que aplica la etapa, en orden: (código, descripción). Van en la hoja Reglas.
+    applied_rules: list[tuple[str, str]] = field(default_factory=list)
 
 
 def build_log(summary: RunSummary, audit: AuditLog) -> bytes:
-    """Genera el log en Excel con las hojas definidas en los lineamientos."""
+    """Genera el log en Excel con tres hojas: Ejecución (los pasos, como en pantalla),
+    Acciones (la misma tabla «Acciones realizadas» de la interfaz) y Reglas."""
     workbook = Workbook()
     sheets = {
-        "Resumen": _summary_table(summary, audit),
         "Ejecución": audit.steps_df(),
         "Acciones": audit.actions_df(),
-        "Hallazgos": audit.findings_df(),
-        "Cambios": audit.changes_df(),
-        "Eliminados": audit.removals_df(),
+        "Reglas": rules_table(summary.applied_rules),
     }
     workbook.remove(workbook.active)
     for title, table in sheets.items():
@@ -55,31 +54,10 @@ def build_log(summary: RunSummary, audit: AuditLog) -> bytes:
     return to_bytes(workbook)
 
 
-def _summary_table(summary: RunSummary, audit: AuditLog) -> pd.DataFrame:
-    """Resumen como una sola tabla (Sección, Concepto, Valor) para poder filtrarla."""
-    rows = [
-        ("General", "Herramienta", APP_NAME),
-        ("General", "Versión de la herramienta", APP_VERSION),
-        ("General", "Etapa", summary.stage_name),
-        ("General", "Fecha y hora", summary.started_at.strftime(f"{DATE_FORMAT_TEXT} %H:%M:%S")),
-        ("General", "Duración (segundos)", round(summary.duration_seconds, 2)),
-        ("General", "Archivo de salida", summary.output_file_name),
-    ]
-    for info in summary.input_files:
-        rows.append(("Archivos de entrada", f"{info.input_label}: {info.file_name}", f"{info.rows} registros leídos"))
-    rows += [
-        ("Totales", "Registros leídos", summary.rows_read),
-        ("Totales", "Registros en salida", summary.rows_output),
-        ("Totales", "Registros eliminados", summary.rows_removed),
-        ("Totales", "Filas de título eliminadas", summary.title_rows_removed),
-        ("Totales", "Celdas modificadas", summary.cells_changed),
-    ]
-    for added in audit.added_columns:
-        rows.append(("Columnas agregadas", f"{added.column} ({added.rule} - {audit.rules[added.rule]})", f"{added.rows} filas"))
-    for item in audit.transformations:
-        rows.append(("Transformaciones", f"{item.rule} - {audit.rules[item.rule]}", item.detail))
-    for severity, count in summary.findings_by_severity.items():
-        rows.append(("Hallazgos por severidad", severity, count))
-    for rule, count in summary.rule_counts.items():
-        rows.append(("Aplicaciones por regla", f"{rule} - {audit.rules[rule]}", count))
-    return pd.DataFrame(rows, columns=["Sección", "Concepto", "Valor"], dtype=object)
+def rules_table(rules: list[tuple[str, str]]) -> pd.DataFrame:
+    """Tabla de reglas de la etapa (Orden, Código, Regla), para la interfaz y el log."""
+    return pd.DataFrame(
+        [(number, code, description) for number, (code, description) in enumerate(rules, start=1)],
+        columns=["Orden", "Código", "Regla"],
+        dtype=object,
+    )

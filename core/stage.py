@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from types import ModuleType
 
-from core.rules import COMMON_RULES
+from core.rules import COMMON_RULES, STRUCTURE_RULES
 
 # Tipos de columna permitidos en la configuración de una entrada.
 COLUMN_TYPES = ("text", "code", "number", "currency", "date")
@@ -58,6 +58,22 @@ def input_specs(stage: ModuleType) -> list[InputSpec]:
 def stage_rules(stage: ModuleType) -> dict[str, str]:
     """Catálogo completo de reglas que puede usar la etapa (comunes + propias)."""
     return {**COMMON_RULES, **getattr(stage, "RULES", {})}
+
+
+def applied_rules(stage: ModuleType) -> list[tuple[str, str]]:
+    """Reglas que aplica la etapa, en el orden en que se aplican: (código, descripción).
+
+    El orden sale de APPLIED_RULES en el config.py de la etapa, que puede incluir
+    reglas comunes (estructura, títulos, conversión). Si la etapa no lo declara,
+    se usan sus reglas propias en el orden de RULES. Es lo que el usuario consulta
+    en la interfaz y en la hoja Reglas del log.
+    """
+    catalog = {**STRUCTURE_RULES, **stage_rules(stage)}
+    codes = getattr(stage, "APPLIED_RULES", None) or list(getattr(stage, "RULES", {}))
+    unknown = [code for code in codes if code not in catalog]
+    if unknown:
+        raise ValueError(f"APPLIED_RULES de {stage.__name__} usa reglas no declaradas: {', '.join(unknown)}")
+    return [(code, catalog[code]) for code in codes]
 
 
 def stage_prefix(stage: ModuleType) -> str:

@@ -3,7 +3,7 @@
 # Entradas que necesita la etapa.
 INPUTS = {
     "ety_report": {
-        "label": "Reporte ETY de pagos (Todos Pagos X Comprobante)",  # Texto que ve el usuario
+        "label": "Reporte ETY de pagos",  # Texto que ve el usuario
         "multiple": False,      # Se procesa un reporte a la vez
         "required": True,
         "sheet": None,          # None = primera hoja; el nombre de la hoja no se valida
@@ -75,13 +75,24 @@ DUPLICATE_TOLERATED_COLUMNS = ["Dpto", "Cd Fnd", "Producto"]
 # Caso 2.3: si difieren en alguna de estas, no se elimina ninguna fila del grupo.
 DUPLICATE_BLOCKING_COLUMNS = ["Subfideicomiso", "Cuenta", "Programa"]
 
-# Reglas propias de la etapa. Se usa la serie 1xx para no chocar con las reglas comunes.
+# Reglas propias de la etapa, en el orden en que se aplican.
+# Se usa la serie 1xx para no chocar con las reglas comunes.
 RULES = {
     "LIM-101": "Eliminar las filas con Descripción «Distribución Caja»",
+    "TRA-101": "Agregar la columna Diferencia: VR. BRUTO - VR. RTEFTE - VR. RETEIVA - VR. RETEICA - VR. TASAS - Importe",
+    "TRA-102": "Ordenar los registros por Comprobante",
     "LIM-102": "Eliminar los registros con Diferencia 0 de un Comprobante cuando VR. BRUTO es 0 (o está vacío) en todos ellos",
     "DUP-101": "Eliminar registros idénticos con el mismo Comprobante y Diferencia 0, sin comparar FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc (caso 2.1)",
     "DUP-102": "Eliminar registros con el mismo Comprobante y Diferencia 0 que solo difieren en Dpto, Cd Fnd y/o Producto, sin comparar FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc (caso 2.2)",
     "VAL-101": "Identificar los registros con Comprobante repetido",
-    "TRA-102": "Ordenar los registros por Comprobante",
-    "TRA-101": "Agregar la columna Diferencia: VR. BRUTO - VR. RTEFTE - VR. RETEIVA - VR. RETEICA - VR. TASAS - Importe",
 }
+
+# Todas las reglas que aplica la etapa (comunes y propias), en el orden en que se
+# aplican. Es la lista que el usuario consulta en la interfaz y en la hoja Reglas del log.
+# EST-002 no aplica: se usa la primera hoja sin importar su nombre.
+APPLIED_RULES = [
+    "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",  # Estructura
+    "LIM-003",   # Filas de título
+    "TIP-005",   # Moneda en las columnas E a J
+    *RULES,
+]

@@ -64,16 +64,13 @@ Mientras procesa, la herramienta muestra en pantalla cada paso que va haciendo y
 
 Al terminar, los resultados se organizan en dos pestañas: **Log de ejecución** (los pasos) y **Acciones realizadas**: todo lo que la herramienta hizo, una fila por acción (fila eliminada, valor modificado, hallazgo, columna agregada…), en el mismo orden en que se hizo.
 
-El log es un archivo de Excel con seis hojas:
+El log es un archivo de Excel con tres hojas:
 
-- **Resumen:** datos generales del procesamiento (archivos, cantidades, hallazgos).
 - **Ejecución:** los mismos pasos que se vieron en pantalla, con su resultado.
-- **Acciones:** la misma tabla de acciones realizadas que se vio en pantalla.
-- **Hallazgos:** problemas encontrados. Los de severidad **Error** deben corregirse antes de la siguiente etapa; las **Advertencias** deben revisarse.
-- **Cambios:** cada celda que la herramienta modificó, con el valor anterior y el nuevo.
-- **Eliminados:** cada registro que se quitó (filas vacías, duplicados, etc.) y el motivo.
+- **Acciones:** la misma tabla de acciones realizadas que se vio en pantalla: cada registro eliminado y su motivo, cada valor modificado, cada hallazgo y cada columna agregada. Los hallazgos de severidad **Error** deben corregirse antes de la siguiente etapa; las **Advertencias** deben revisarse.
+- **Reglas:** las reglas que aplica la etapa, en orden, con el código que aparece en la hoja Acciones.
 
-La columna **Fila origen** indica la fila en su archivo original, para que pueda ubicarla fácilmente en Excel.
+La columna **Fila** indica la fila en su archivo original, para que pueda ubicarla fácilmente en Excel.
 
 ### Si algo sale mal
 

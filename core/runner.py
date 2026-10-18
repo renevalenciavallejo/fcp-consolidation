@@ -20,7 +20,7 @@ from core.audit import AuditLog
 from core.log_report import InputFileInfo, RunSummary, build_log
 from core.reader import ReadResult, combine, file_name, read_file
 from core.settings import CURRENCY_FORMAT_EXCEL, OUTPUT_DIR
-from core.stage import input_specs, stage_prefix, stage_rules
+from core.stage import applied_rules, input_specs, stage_prefix, stage_rules
 from core.writer import SheetStyle, build_output
 
 class StageError(Exception):
@@ -128,6 +128,7 @@ def run_stage(
         findings_by_severity=audit.findings_by_severity(),
         rule_counts=audit.rule_counts(),
         input_files=input_files,
+        applied_rules=applied_rules(stage),
     )
     # Se anota antes de construir el log para que también quede en su hoja Ejecución.
     audit.note(f"Terminado en {summary.duration_seconds:.1f} s".replace(".", ","))

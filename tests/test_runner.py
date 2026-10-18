@@ -1,11 +1,14 @@
 from datetime import datetime
 from io import BytesIO
+from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 from openpyxl import load_workbook
 
 from core.runner import StageError, result_file_names, run_stage, save_result
 from core.settings import SEVERITY_FILLS, WARNING
+from core.stage import applied_rules
 from tests import stage_99_fake
 from tests.helpers import make_xlsx
 
@@ -83,17 +86,28 @@ def test_full_run():
     assert sheet["D3"].fill.start_color.rgb.endswith(SEVERITY_FILLS[WARNING])  # Fuente "Otros"
     assert sheet["C4"].value == "abc" and sheet["C4"].fill.fill_type == "solid"  # Valor inválido
 
-    # Log: seis hojas con filtros y paneles inmovilizados.
+    # Log: tres hojas con filtros y paneles inmovilizados.
     log = load_workbook(BytesIO(result.log_bytes))
-    assert log.sheetnames == ["Resumen", "Ejecución", "Acciones", "Hallazgos", "Cambios", "Eliminados"]
+    assert log.sheetnames == ["Ejecución", "Acciones", "Reglas"]
+    # Sin APPLIED_RULES, la hoja Reglas muestra las reglas propias de la etapa.
+    rules = list(log["Reglas"].iter_rows(values_only=True))
+    assert rules == [("Orden", "Código", "Regla"), (1, "VAL-901", "La fuente debe estar en el catálogo de fuentes")]
     execution = list(log["Ejecución"].iter_rows(min_row=2, values_only=True))
     assert execution[0] == ("Verificando archivos cargados", "✓ 3 archivos: area_a.xlsx, area_b.xlsx, cat.xlsx")
     assert execution[-1][1].startswith("✓ Terminado en ")
     for ws in log.worksheets:
         assert ws.auto_filter.ref and ws.freeze_panes == "A2"
-    removed_rows = [(r[0], r[1]) for r in log["Eliminados"].iter_rows(min_row=2, values_only=True)]
+    # Acciones: exactamente la tabla «Acciones realizadas» de la interfaz, fila por fila.
+    sheet = log["Acciones"]
+    expected = result.audit.actions_df()
+    assert [c.value for c in sheet[1]] == list(expected.columns)
+    logged = [[c.value for c in row] for row in sheet.iter_rows(min_row=2)]
+    # En Excel una celda con texto vacío queda vacía.
+    shown = [[None if pd.isna(v) or v == "" else v for v in row] for row in expected.itertuples(index=False)]
+    assert logged == shown
     # Primero la fila de título del catálogo (encabezados en la fila 2), luego los registros.
-    assert removed_rows == [("cat.xlsx", 1), ("area_a.xlsx", 3), ("area_b.xlsx", 2)]
+    removed = [(r[1], r[2]) for r in logged if r[3] == "Fila eliminada"]
+    assert removed == [("cat.xlsx", 1), ("area_a.xlsx", 3), ("area_b.xlsx", 2)]
     assert summary.title_rows_removed == 1
 
 
@@ -164,3 +178,9 @@ def test_result_names_do_not_grow_from_stage_to_stage():
     assert result_file_names(stage_99_fake, ["ETY_sept_E01_procesado.xlsx"])[0] == "ETY_sept_E99_procesado.xlsx"
     # Si el usuario lo guardó con otro nombre, no se toca.
     assert result_file_names(stage_99_fake, ["ETY_E01_procesado_v2.xlsx"])[0] == "ETY_E01_procesado_v2_E99_procesado.xlsx"
+
+
+def test_applied_rules_with_unknown_code_fail():
+    stage = SimpleNamespace(__name__="stage_98_bad", RULES={"VAL-981": "Prueba"}, APPLIED_RULES=["EST-001", "VAL-999"])
+    with pytest.raises(ValueError, match="VAL-999"):
+        applied_rules(stage)

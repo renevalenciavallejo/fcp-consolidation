@@ -133,7 +133,7 @@ Al leer, el lector agrega a cada registro dos columnas internas:
 - `_source_file`: nombre del archivo del que proviene.
 - `_source_row`: número de fila real en ese archivo de Excel.
 
-Las filas anteriores a los encabezados (títulos del reporte) no forman parte de los datos: el lector las guarda en `ReadResult.title_rows` y el ejecutor las registra en *Eliminados* con la regla común `LIM-003`, antes de llamar a `process`. Se informan aparte («Filas de título eliminadas») y no cuentan como registros eliminados.
+Las filas anteriores a los encabezados (títulos del reporte) no forman parte de los datos: el lector las guarda en `ReadResult.title_rows` y el ejecutor las registra como eliminadas (hoja *Acciones*) con la regla común `LIM-003`, antes de llamar a `process`. No cuentan como registros eliminados (`RunSummary.title_rows_removed` las cuenta aparte).
 
 Estas columnas permiten que el log siempre apunte al archivo y la fila que el usuario puede buscar. Se eliminan del archivo de salida. Las etapas deben conservarlas en el `DataFrame` que devuelven para que funcione el resaltado de hallazgos.
 
@@ -150,6 +150,7 @@ NAME = "Etapa 1 - Consolidación de reportes de áreas"   # Texto visible para e
 DESCRIPTION = "Une los reportes de las áreas, limpia y valida los datos."
 INPUTS = config.INPUTS
 RULES = config.RULES      # Opcional: reglas propias {código: descripción}
+APPLIED_RULES = config.APPLIED_RULES   # Opcional: códigos de todas las reglas que aplica, en orden
 
 def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     """Recibe los datos de cada entrada, ya leídos y validados, y devuelve
@@ -178,8 +179,8 @@ En bloque, para no escribir ciclos celda por celda en las etapas:
 - `change_column(df, column, new_values, rule, changed=None)`: registra solo las celdas que cambian.
 - `finding_column(df, mask, column, severity, rule, description, suggested_action)`
 - `remove_rows(df, mask, rule, reason)`: registra y devuelve el `DataFrame` sin esas filas (`reason` puede ser texto o una `Series` por fila).
-- `column_added(column, rule, rows)`: registra una columna calculada nueva una sola vez (aparece en Resumen como «Columnas agregadas»), no celda por celda.
-- `transformation(rule, detail)`: registra una transformación de toda la tabla, como un ordenamiento (aparece en Resumen como «Transformaciones»).
+- `column_added(column, rule, rows)`: registra una columna calculada nueva una sola vez (aparece en *Acciones* como «Columna agregada»), no celda por celda.
+- `transformation(rule, detail)`: registra una transformación de toda la tabla, como un ordenamiento (aparece en *Acciones* como «Transformación»).
 
 Log de ejecución (lo que el usuario ve en vivo en la interfaz y en la CLI, y la hoja *Ejecución* del log):
 
@@ -262,7 +263,7 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
 
 - Formato: `<TIPO>-<NNN>`, por ejemplo `LIM-001`.
 - Tipos: `EST` estructura, `LIM` limpieza, `TIP` conversión de tipos, `CON` consolidación, `DUP` duplicados, `VAL` validación de negocio, `TRA` transformación.
-- Las reglas comunes están en `core/rules.py` (`EST-001…008` aparecen en los mensajes de error de estructura; `LIM-001…003`, `TIP-001…005` y `DUP-001` quedan en el log). Las específicas de cada etapa, en el `RULES` de su `config.py`, sin repetir códigos comunes. Convención: la etapa NN usa la serie NNx (etapa 1: `LIM-101`, `VAL-101`, …); las comunes usan 00x.
+- Las reglas comunes están en `core/rules.py` (`EST-001…008` aparecen en los mensajes de error de estructura; `LIM-001…003`, `TIP-001…005` y `DUP-001` quedan en el log). Las específicas de cada etapa, en el `RULES` de su `config.py`, sin repetir códigos comunes. `APPLIED_RULES` (opcional) lista, en el orden en que se aplican, todas las reglas de la etapa, comunes incluidas; `core.stage.applied_rules` arma con ella la tabla que el usuario consulta en la interfaz («Reglas que aplica esta etapa») y en la hoja *Reglas* del log. Sin `APPLIED_RULES` se usa el orden de `RULES`. Las descripciones se escriben para el usuario, en lenguaje sencillo. Convención: la etapa NN usa la serie NNx (etapa 1: `LIM-101`, `VAL-101`, …); las comunes usan 00x.
 - Para comparar textos de negocio (por ejemplo, un valor que identifica filas a eliminar) usar `comparable_text`, que ignora mayúsculas, tildes y espacios sobrantes.
 
 ## 8. Archivos generados
@@ -287,14 +288,13 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
 
 ### 8.3 Archivo de log (Excel)
 
+Solo tres hojas, para que el usuario revise lo mismo que vio en pantalla:
+
 | Hoja           | Columnas                                                                                                                                                                                                                                                             |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Resumen**    | Tabla Sección / Concepto / Valor: versión de la herramienta, etapa, archivos de entrada (nombre y registros leídos de cada uno), archivo de salida, fecha y hora, duración, registros en salida, registros eliminados, celdas modificadas, hallazgos por severidad, cantidad de aplicaciones por regla |
 | **Ejecución**  | Paso, Resultado: el log de ejecución, en el orden en que ocurrió (el mismo que se ve en pantalla)                                                                                                                                                                       |
-| **Acciones**   | Paso, archivo (solo con varios archivos), fila, acción (Fila eliminada, Valor modificado, Hallazgo (severidad), Columna agregada, Transformación), columna, detalle, qué hacer, regla y todas las columnas del registro. En el orden en que ocurrió cada acción                                                                         |
-| **Hallazgos**  | Archivo origen, fila origen, columna, severidad, código de regla, descripción, valor encontrado, acción sugerida                                                                                                                                                     |
-| **Cambios**    | Archivo origen, fila origen, columna, valor anterior, valor nuevo, código de regla, descripción de la regla                                                                                                                                                          |
-| **Eliminados** | Archivo origen, fila origen, código de regla, motivo, seguido de todas las columnas del registro eliminado                                                                                                                                                           |
+| **Acciones**   | Paso, archivo (solo con varios archivos), fila, acción (Fila eliminada, Valor modificado, Hallazgo (severidad), Columna agregada, Transformación), columna, detalle, qué hacer, regla y todas las columnas del registro. En el orden en que ocurrió cada acción. Es exactamente la tabla «Acciones realizadas» de la interfaz               |
+| **Reglas**     | Orden, código y descripción de cada regla que aplica la etapa (la misma lista que se consulta en la interfaz)                                                                                                                                                     |
 
 - **Fila origen** = número de fila en el archivo de entrada (el que el usuario ve en Excel).
 - Severidades: `Error` (requiere corrección manual antes de la siguiente etapa), `Advertencia` (revisar), `Información`.
@@ -312,7 +312,7 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
 Flujo:
 
 1. **Barra lateral:** nombre y versión de la herramienta, y selección de la etapa (en el orden del proceso).
-2. **Área principal:** nombre y descripción de la etapa.
+2. **Área principal:** nombre y descripción de la etapa, y una sección plegable «Reglas que aplica esta etapa» con las reglas en orden, como lista numerada de texto (sin tabla).
 3. **Un cargador de archivos por cada entrada declarada**, con su etiqueta. Solo acepta `.xlsx` y permite varios archivos cuando la entrada lo indica.
 4. **Botón "Procesar"**, deshabilitado hasta que estén cargadas todas las entradas obligatorias. Cuando hay resultados, a su lado aparecen los botones de descarga y "Nuevo procesamiento". Los mensajes de éxito o error van justo debajo de esta fila.
 5. **Log de ejecución en vivo:** cada paso y su resultado aparecen a medida que avanzan, en un bloque que no se contrae. Si el proceso se detiene, el log queda en pantalla y muestra en qué paso falló.
@@ -351,7 +351,7 @@ Solo modo no interactivo: `--stage N` y `--input <id_entrada> <archivos...>` (re
 - **Fechas:** soportar fechas nativas de Excel, número serial de Excel, texto `dd/mm/aaaa` y `aaaa-mm-dd`. Asumir día/mes (nunca mes/día). Si es ambiguo (año de dos dígitos) o inválido, se registra un hallazgo.
 - **Cambios por conversión:** solo se registran cuando el valor visible cambia (`"1.234,5"` → 1234.5), no cuando solo cambia el tipo (`"1234"` → 1234).
 - **Vacíos:** distinguir vacío de cero (`core.audit.is_empty`).
-- **Filas a eliminar:** filas completamente vacías y filas de totales o subtotales (según reglas de cada etapa), siempre registradas en _Eliminados_.
+- **Filas a eliminar:** filas completamente vacías y filas de totales o subtotales (según reglas de cada etapa), siempre registradas en el log (hoja *Acciones*).
 - **Varios archivos:** los duplicados se buscan tanto dentro de cada archivo como entre archivos (`remove_duplicates`). El motivo indica el archivo y la fila del registro original.
 - **Confidencialidad:** sin envío de datos a internet, sin telemetría. Los datos reales no se suben a git.
 
@@ -378,7 +378,7 @@ Solo modo no interactivo: `--stage N` y `--input <id_entrada> <archivos...>` (re
 ## 13. Versionamiento y documentación
 
 - `.gitignore` excluye `tests/cases/`, `output/`, todos los `.xlsx`, `.venv/`, `__pycache__/` y `errores.log`.
-- La versión se cambia **solo** en `pyproject.toml` (`MAYOR.MENOR.PARCHE`); `core/settings.py` la lee de ahí. Aparece en la interfaz y en el log.
+- La versión se cambia **solo** en `pyproject.toml` (`MAYOR.MENOR.PARCHE`); `core/settings.py` la lee de ahí. Aparece en la interfaz.
 - `CHANGELOG.md` actualizado en cada versión.
 - `README.md` con instrucciones de instalación y uso para Windows y macOS, paso a paso, para alguien sin experiencia técnica.
 - Cada etapa tiene su `ESPECIFICACION.md`: archivos de entrada esperados, reglas aplicadas (con código), archivo de salida y tareas manuales que siguen siendo responsabilidad del usuario.

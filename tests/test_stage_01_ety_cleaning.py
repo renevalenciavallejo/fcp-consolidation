@@ -7,6 +7,7 @@ import pytest
 from openpyxl import load_workbook
 
 from core.runner import StageError, run_stage
+from core.stage import applied_rules
 from stages import stage_01_ety_cleaning
 from tests.helpers import make_xlsx
 
@@ -217,9 +218,9 @@ def test_difference_column_has_formula_right_of_importe():
     assert [(a.column, a.rule, a.rows) for a in added] == [("Diferencia", "TRA-101", 2)]
     assert result.summary.cells_changed == 0  # La columna nueva no cuenta como celdas modificadas
 
-    summary = load_workbook(BytesIO(result.log_bytes))["Resumen"]
-    sections = [row for row in summary.iter_rows(values_only=True) if row[0] == "Columnas agregadas"]
-    assert len(sections) == 1 and sections[0][1].startswith("Diferencia (TRA-101") and sections[0][2] == "2 filas"
+    actions = load_workbook(BytesIO(result.log_bytes))["Acciones"]
+    added_rows = [row for row in actions.iter_rows(values_only=True) if "Columna agregada" in row]
+    assert len(added_rows) == 1 and "TRA-101" in added_rows[0]
 
 
 
@@ -484,3 +485,27 @@ def test_rows_with_non_zero_difference_are_not_evaluated():
 def test_zero_gross_rule_runs_before_duplicates():
     result = run(ety_file(rows=(zero_gross("1"), zero_gross("1"))))   # También sería caso 2.1
     assert [(r.source_row, r.rule) for r in result.audit.removals[3:]] == [(5, "LIM-102"), (6, "LIM-102")]
+
+
+# --- Reglas que consulta el usuario --------------------------------------------
+
+
+def test_applied_rules_follow_the_processing_order():
+    codes = [code for code, _ in applied_rules(stage_01_ety_cleaning)]
+    assert codes == [
+        "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",
+        "LIM-003", "TIP-005", "LIM-101", "TRA-101", "TRA-102", "LIM-102", "DUP-101", "DUP-102", "VAL-101",
+    ]
+    # Las reglas propias aparecen en el mismo orden en que se aplican en el log de acciones.
+    rows = (zero_gross("9"), with_voucher("1"), with_voucher("1"), with_voucher("2"), with_voucher("2", Cuenta="X"),
+            with_voucher("3", "Distribución Caja"), with_voucher("4"), with_voucher("4", Dpto="X"))
+    applied = list(dict.fromkeys(run(ety_file(rows=rows)).audit.actions_df()["Regla"]))
+    assert applied == [c for c in codes if c in applied]
+
+
+def test_rules_sheet_in_log():
+    sheet = load_workbook(BytesIO(run(ety_file()).log_bytes))["Reglas"]
+    rows = list(sheet.iter_rows(values_only=True))
+    assert rows[0] == ("Orden", "Código", "Regla")
+    assert rows[1] == (1, "EST-007", "Validar que se carguen los archivos obligatorios y no sobren archivos")
+    assert len(rows) == 17
