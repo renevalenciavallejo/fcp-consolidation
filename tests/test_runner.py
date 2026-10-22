@@ -8,7 +8,7 @@ from openpyxl import load_workbook
 
 from core.runner import StageError, result_file_names, run_stage, save_result
 from core.settings import SEVERITY_FILLS, WARNING
-from core.stage import applied_rules
+from core.stage import applied_rules, input_specs
 from tests import stage_99_fake
 from tests.helpers import make_xlsx
 
@@ -187,3 +187,19 @@ def test_applied_rules_with_unknown_code_fail():
     stage = SimpleNamespace(__name__="stage_98_bad", RULES={"VAL-981": "Prueba"}, APPLIED_RULES=["EST-001", "VAL-999"])
     with pytest.raises(ValueError, match="VAL-999"):
         applied_rules(stage)
+
+
+def test_per_date_input_must_come_after_its_source():
+    inputs = {
+        "by_date": {"label": "Por fecha", "per_date": {"input": "main", "column": "Fecha"}, "columns": None},
+        "main": {"label": "Principal", "columns": {"Fecha": "date"}},
+    }
+    with pytest.raises(ValueError, match="debe declararse antes"):
+        input_specs(SimpleNamespace(INPUTS=inputs))
+
+
+def test_result_name_comes_from_the_main_input():
+    # Con un solo reporte y un catálogo, la salida conserva el nombre del reporte.
+    report = make_xlsx([HEADER, ["001", "05/03/2024", "1", "PGN"]], sheet="Ejecucion", name="ETY_sept.xlsx")
+    result = run_stage(stage_99_fake, {"reports": [report], "catalog": [catalog()]})
+    assert result.output_file_name == "ETY_sept_E99_procesado.xlsx"

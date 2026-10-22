@@ -79,6 +79,11 @@ def read_file(file: Any, spec: InputSpec) -> ReadResult:
             name, None, [f"[EST-002] {name}: no tiene la hoja '{spec.sheet}'. Hojas encontradas: {sheets}."]
         )
 
+    if spec.columns is None:
+        # Estructura todavía sin especificar: basta con que el archivo abra como .xlsx.
+        workbook.close()
+        return ReadResult(name, None, [])
+
     worksheet = workbook[sheet_name]
     rows = list(worksheet.iter_rows(min_row=1, min_col=1, values_only=True))
     workbook.close()
@@ -142,7 +147,7 @@ def combine(results: list[ReadResult], spec: InputSpec) -> pd.DataFrame:
     """Une en un solo DataFrame los archivos de una entrada que tienen la misma estructura."""
     frames = [r.data for r in results if r.data is not None]
     if not frames:
-        return pd.DataFrame(columns=[*spec.columns, SOURCE_FILE, SOURCE_ROW], dtype=object)
+        return pd.DataFrame(columns=[*(spec.columns or {}), SOURCE_FILE, SOURCE_ROW], dtype=object)
     return pd.concat(frames, ignore_index=True)
 
 

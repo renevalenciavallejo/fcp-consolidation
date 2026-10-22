@@ -9,7 +9,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -17,10 +17,11 @@ from typing import Any
 import pandas as pd
 
 from core.audit import AuditLog
+from core.cleaning import parse_date
 from core.log_report import InputFileInfo, RunSummary, build_log
 from core.reader import ReadResult, combine, file_name, read_file
-from core.settings import CURRENCY_FORMAT_EXCEL, OUTPUT_DIR
-from core.stage import applied_rules, input_specs, stage_prefix, stage_rules
+from core.settings import CURRENCY_FORMAT_EXCEL, DATE_FORMAT_TEXT, OUTPUT_DIR
+from core.stage import InputSpec, applied_rules, date_label, input_specs, stage_prefix, stage_rules
 from core.writer import SheetStyle, build_output
 
 class StageError(Exception):
@@ -57,16 +58,20 @@ PROCESSED_SUFFIX = r"_E\d{2}_procesado(_\d+| \(\d+\))?$"
 # Recibe cada línea del log de ejecución apenas se produce.
 ProgressCallback = Callable[[str], None]
 
+# Archivos cargados por entrada: una lista o, en las entradas por fecha, {fecha: archivo}.
+StageFiles = dict[str, list[Any] | dict[date, Any]]
+
 
 def run_stage(
     stage: ModuleType,
-    files: dict[str, list[Any]],
+    files: StageFiles,
     progress: ProgressCallback | None = None,
 ) -> StageResult:
     """Ejecuta una etapa completa sobre los archivos dados.
 
     `files` tiene una llave por entrada declarada en la etapa y, como valor, la
-    lista de archivos de esa entrada. Lanza StageError si los archivos no
+    lista de archivos de esa entrada. En una entrada por fecha (`per_date`), el
+    valor es un diccionario {fecha: archivo}. Lanza StageError si los archivos no
     cumplen la estructura esperada; en ese caso no se genera ningún resultado.
     `progress` recibe cada línea del log de ejecución mientras avanza.
     """
@@ -83,20 +88,25 @@ def run_stage(
         for problem in problems:
             audit.note(problem, ok=False)
         raise StageError(_inputs_message(files), problems, audit.step_lines())
-    names = [file_name(f) for spec in specs for f in files.get(spec.key, [])]
+    names = [file_name(f) for spec in specs for f in _files_of(spec, files)]
     audit.multiple_files = len(names) > 1
     audit.note(f"{'1 archivo' if len(names) == 1 else f'{len(names)} archivos'}: {', '.join(names)}")
 
     # 2 y 3. Lectura y validación estricta, archivo por archivo
     read_results: dict[str, list[ReadResult]] = {}
     for spec in specs:
-        read_results[spec.key] = [read_and_report(f, spec, audit) for f in files.get(spec.key, [])]
-    problems = [p for results in read_results.values() for r in results for p in r.problems]
-    if problems:
-        failed = sum(1 for results in read_results.values() for r in results if r.problems)
-        audit.finish_step()
-        raise StageError(_structure_message(failed, _count_files(files)), problems, audit.step_lines())
-    inputs = {spec.key: combine(read_results[spec.key], spec) for spec in specs}
+        if not spec.per_date:
+            read_results[spec.key] = [read_and_report(f, spec, audit) for f in files.get(spec.key, [])]
+    _stop_on_structure_problems(read_results, files, audit)
+    inputs = {key: combine(results, _spec(specs, key)) for key, results in read_results.items()}
+
+    # Las entradas por fecha se verifican después, porque sus fechas salen de otra entrada ya validada.
+    for spec in specs:
+        if spec.per_date:
+            read_results[spec.key] = read_per_date(spec, files.get(spec.key) or {}, inputs, audit)
+            inputs[spec.key] = combine(read_results[spec.key], spec)
+    _stop_on_structure_problems(read_results, files, audit)
+    inputs = {spec.key: inputs[spec.key] for spec in specs}  # En el orden en que se declararon
     for data in inputs.values():
         audit.remember_source_rows(data)
 
@@ -110,7 +120,8 @@ def run_stage(
 
     # 5. Construcción de resultados
     audit.step("Generando el archivo de salida y el log")
-    output_name, log_name = result_file_names(stage, names)
+    # El nombre sale de la entrada principal (la primera); las demás son de apoyo.
+    output_name, log_name = result_file_names(stage, [file_name(f) for f in _files_of(specs[0], files)])
 
     input_files = [
         InputFileInfo(spec.label, r.file_name, r.rows) for spec in specs for r in read_results[spec.key]
@@ -159,7 +170,7 @@ def output_formats(specs: list) -> dict[str, str]:
     return {
         column: CURRENCY_FORMAT_EXCEL
         for spec in specs
-        for column, column_type in spec.columns.items()
+        for column, column_type in (spec.columns or {}).items()
         if column_type == "currency"
     }
 
@@ -197,14 +208,19 @@ def remove_title_rows(read_results: dict[str, list[ReadResult]], audit: AuditLog
     return count
 
 
-def read_and_report(file: Any, spec, audit: AuditLog) -> ReadResult:
+def read_and_report(file: Any, spec, audit: AuditLog, day: date | None = None) -> ReadResult:
     """Lee y valida un archivo, y deja en el log de ejecución si se pudo abrir y si su
-    estructura es la esperada (con cada problema encontrado)."""
+    estructura es la esperada (con cada problema encontrado). `day` es la fecha del
+    archivo en una entrada por fecha, para que el log diga a cuál corresponde."""
     result = read_file(file, spec)
-    audit.step(f"Abriendo «{result.file_name}»")
+    for_day = f" ({date_label(spec, day)})" if day else ""
+    audit.step(f"Abriendo «{result.file_name}»{for_day}")
     if not result.opened:
         for problem in result.problems:
             audit.note(problem, ok=False)
+        return result
+    if spec.columns is None:
+        audit.note("Archivo .xlsx válido (su estructura todavía no se valida)")
         return result
     audit.note("Archivo .xlsx válido")
     audit.step(f"Validando la estructura de «{result.file_name}»")
@@ -217,11 +233,105 @@ def read_and_report(file: Any, spec, audit: AuditLog) -> ReadResult:
     return result
 
 
-def _count_files(files: dict[str, list[Any]]) -> int:
+def input_dates(stage: ModuleType, files: StageFiles) -> dict[str, list[date]]:
+    """Fechas de cada entrada por fecha, para que la interfaz pida un archivo por fecha.
+
+    Lee y valida el archivo del que salen las fechas (por ejemplo, el reporte ETY).
+    Lanza StageError si su estructura no es la esperada. Una entrada cuyo archivo de
+    origen todavía no se ha cargado no aparece en el resultado.
+    """
+    specs = input_specs(stage)
+    audit = AuditLog(stage_rules(stage))
+    dates = {}
+    for spec in specs:
+        if not spec.per_date:
+            continue
+        source_key, column = spec.per_date
+        source = _spec(specs, source_key)
+        source_files = files.get(source_key) or []
+        if not source_files:
+            continue
+        results = [read_and_report(f, source, audit) for f in source_files]
+        _stop_on_structure_problems({source_key: results}, {source_key: source_files}, audit)
+        dates[spec.key] = dates_in(combine(results, source), column)
+    return dates
+
+
+def dates_in(data: pd.DataFrame, column: str) -> list[date]:
+    """Fechas distintas de una columna, ordenadas y sin la hora.
+
+    Las celdas vacías se ignoran. Las que no son una fecha también: la Etapa 1 ya
+    las reporta como hallazgo y no tienen un archivo que pedir.
+    """
+    days = set()
+    for value in data[column]:
+        try:
+            parsed = parse_date(value)
+        except ValueError:
+            continue
+        if parsed is not None:
+            days.add(parsed.date())
+    return sorted(days)
+
+
+def read_per_date(
+    spec: InputSpec, files: dict[date, Any], inputs: dict[str, pd.DataFrame], audit: AuditLog
+) -> list[ReadResult]:
+    """Verifica que haya un archivo por cada fecha de la entrada de origen y los lee.
+
+    Las fechas salen de la columna configurada en `per_date`. Si falta el archivo de
+    una fecha obligatoria, o se cargó uno de una fecha que no está en el origen, se
+    detiene sin generar resultados. Regla EST-007.
+    """
+    source_key, column = spec.per_date
+    days = dates_in(inputs[source_key], column)
+    audit.step(f"Verificando: {spec.label}, uno por fecha")
+    problems = []
+    if spec.required:
+        problems += [f"[EST-007] Falta cargar: {date_label(spec, day)}." for day in days if day not in files]
+    problems += [
+        f"[EST-007] Se cargó «{file_name(file)}» como {date_label(spec, day)}, "
+        f"pero esa fecha no está en la columna {column}."
+        for day, file in files.items() if day not in days
+    ]
+    if problems:
+        for problem in problems:
+            audit.note(problem, ok=False)
+        message = f"Los archivos de «{spec.label}» no corresponden a las fechas de la columna {column}."
+        raise StageError(message, problems, audit.step_lines())
+    if not days:
+        audit.note(f"La columna {column} no tiene fechas: no se necesita ningún archivo")
+    for day in days:
+        audit.note(f"{day.strftime(DATE_FORMAT_TEXT)}: {file_name(files[day])}")
+    return [read_and_report(files[day], spec, audit, day) for day in days]
+
+
+def _spec(specs: list[InputSpec], key: str) -> InputSpec:
+    return next(spec for spec in specs if spec.key == key)
+
+
+def _files_of(spec: InputSpec, files: StageFiles) -> list[Any]:
+    """Archivos cargados en una entrada, sea una lista o un diccionario por fecha."""
+    loaded = files.get(spec.key) or []
+    return list(loaded.values()) if isinstance(loaded, dict) else list(loaded)
+
+
+def _stop_on_structure_problems(
+    read_results: dict[str, list[ReadResult]], files: StageFiles, audit: AuditLog
+) -> None:
+    """Detiene el procesamiento si algún archivo leído tiene problemas de estructura."""
+    problems = [p for results in read_results.values() for r in results for p in r.problems]
+    if problems:
+        failed = sum(1 for results in read_results.values() for r in results if r.problems)
+        audit.finish_step()
+        raise StageError(_structure_message(failed, _count_files(files)), problems, audit.step_lines())
+
+
+def _count_files(files: StageFiles) -> int:
     return sum(len(f or []) for f in files.values())
 
 
-def _inputs_message(files: dict[str, list[Any]]) -> str:
+def _inputs_message(files: StageFiles) -> str:
     """Mensaje principal cuando los archivos cargados no son los que pide la etapa."""
     count = _count_files(files)
     if count == 0:
@@ -240,14 +350,22 @@ def _structure_message(failed: int, total: int) -> str:
     return f"La estructura de {failed} de los {total} archivos no es la esperada."
 
 
-def check_inputs(specs: list, files: dict[str, list[Any]]) -> list[str]:
-    """Verifica que estén las entradas obligatorias y que no sobren archivos. Regla EST-007."""
+def check_inputs(specs: list, files: StageFiles) -> list[str]:
+    """Verifica que estén las entradas obligatorias y que no sobren archivos. Regla EST-007.
+
+    El archivo de cada fecha de una entrada por fecha se verifica después, al leer la
+    entrada de la que salen las fechas (read_per_date).
+    """
     problems = []
     known = [spec.key for spec in specs]
     for key in files:
         if key not in known:
             problems.append(f"[EST-007] La entrada '{key}' no existe en esta etapa. Entradas válidas: {', '.join(known)}.")
     for spec in specs:
+        if spec.per_date:
+            if not isinstance(files.get(spec.key) or {}, dict):
+                problems.append(f"[EST-007] '{spec.label}' necesita un archivo por fecha, con la fecha de cada uno.")
+            continue
         count = len(files.get(spec.key) or [])
         if spec.required and count == 0:
             problems.append(f"[EST-007] Falta cargar: {spec.label}.")

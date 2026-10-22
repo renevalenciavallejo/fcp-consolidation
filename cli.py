@@ -2,10 +2,14 @@
 
 Ejemplo:
     uv run python cli.py --stage 1 --input area_reports "ruta/archivo1.xlsx" "ruta/archivo2.xlsx"
+
+En una entrada por fecha, cada archivo va precedido de su fecha (aaaa-mm-dd):
+    uv run python cli.py --stage 2 --input ety_processed "ety.xlsx" --input treasury_reports 2026-09-28="pagos_28.xlsx"
 """
 
 import argparse
 import sys
+from datetime import date
 from pathlib import Path
 
 from core.errors import UNEXPECTED_ERROR_MESSAGE, log_exception
@@ -42,14 +46,27 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     stage = STAGES[args.stage - 1]
 
-    files: dict[str, list[Path]] = {}
+    per_date = {spec.key for spec in input_specs(stage) if spec.per_date}
+    files: dict = {}
     for key, *paths in args.input:
         if not paths:
             print(f"La entrada '{key}' no tiene archivos.")
             return 2
-        files.setdefault(key, []).extend(Path(p) for p in paths)
-    for paths in files.values():
-        for path in paths:
+        if key not in per_date:
+            files.setdefault(key, []).extend(Path(p) for p in paths)
+            continue
+        for value in paths:
+            day, separator, path = value.partition("=")
+            try:
+                day = date.fromisoformat(day)
+            except ValueError:
+                separator = ""
+            if not separator:
+                print(f"En la entrada '{key}' cada archivo va con su fecha: aaaa-mm-dd=ruta. Se recibió: {value}")
+                return 2
+            files.setdefault(key, {})[day] = Path(path)
+    for loaded in files.values():
+        for path in (loaded.values() if isinstance(loaded, dict) else loaded):
             if not path.is_file():
                 print(f"No se encontró el archivo: {path}")
                 return 2

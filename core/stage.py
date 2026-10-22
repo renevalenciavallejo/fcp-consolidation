@@ -7,9 +7,11 @@ que adivinar llaves ni valores por defecto.
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from types import ModuleType
 
 from core.rules import COMMON_RULES, STRUCTURE_RULES
+from core.settings import MONTH_NAMES
 
 # Tipos de columna permitidos en la configuración de una entrada.
 COLUMN_TYPES = ("text", "code", "number", "currency", "date")
@@ -25,15 +27,19 @@ class InputSpec:
     required: bool
     sheet: str | None              # None = primera hoja del archivo, sin importar su nombre
     header_row: int
-    columns: dict[str, str]
+    # None = estructura todavía sin especificar: solo se verifica que el archivo abra como .xlsx.
+    columns: dict[str, str] | None
     allow_extra_columns: bool = False
     check_column_order: bool = False
+    # Entrada con un archivo por cada fecha distinta de otra entrada: (entrada, columna).
+    per_date: tuple[str, str] | None = None
 
 
 def input_specs(stage: ModuleType) -> list[InputSpec]:
     """Convierte el diccionario INPUTS de la etapa en una lista de InputSpec."""
     specs = []
     for key, data in stage.INPUTS.items():
+        per_date = data.get("per_date")
         spec = InputSpec(
             key=key,
             label=data["label"],
@@ -41,11 +47,16 @@ def input_specs(stage: ModuleType) -> list[InputSpec]:
             required=data.get("required", True),
             sheet=data.get("sheet"),
             header_row=data.get("header_row", 1),
-            columns=data["columns"],
+            columns=data.get("columns"),
             allow_extra_columns=data.get("allow_extra_columns", False),
             check_column_order=data.get("check_column_order", False),
+            per_date=(per_date["input"], per_date["column"]) if per_date else None,
         )
-        for column, column_type in spec.columns.items():
+        if per_date and per_date["input"] not in [s.key for s in specs]:
+            raise ValueError(
+                f"La entrada '{key}' depende de '{per_date['input']}', que debe declararse antes en INPUTS."
+            )
+        for column, column_type in (spec.columns or {}).items():
             if column_type not in COLUMN_TYPES:
                 raise ValueError(
                     f"Tipo '{column_type}' no válido para la columna '{column}' "
@@ -53,6 +64,11 @@ def input_specs(stage: ModuleType) -> list[InputSpec]:
                 )
         specs.append(spec)
     return specs
+
+
+def date_label(spec: InputSpec, day: date) -> str:
+    """Nombre que ve el usuario para el archivo de una fecha: «Informe de pago del 28 de junio de 2026»."""
+    return f"{spec.label} del {day.day} de {MONTH_NAMES[day.month - 1]} de {day.year}"
 
 
 def stage_rules(stage: ModuleType) -> dict[str, str]:

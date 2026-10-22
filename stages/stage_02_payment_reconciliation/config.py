@@ -39,6 +39,17 @@ INPUTS = {
             "Programa": "code",
         },
     },
+    "treasury_reports": {
+        "label": "Informe de pago",   # La interfaz agrega la fecha: «... del 28 de septiembre de 2026»
+        # Un archivo por cada fecha distinta de FECHA DE PAGO del reporte ETY (las vacías se ignoran).
+        # Todas las fechas son obligatorias.
+        "per_date": {"input": "ety_processed", "column": "FECHA DE PAGO"},
+        "required": True,
+        "sheet": None,          # None = primera hoja
+        "header_row": 1,
+        # Estructura por especificar: por ahora solo se verifica que cada archivo abra como .xlsx.
+        "columns": None,
+    },
 }
 
 # Reglas propias de la etapa (serie 2xx). Se agregan a medida que se especifiquen.

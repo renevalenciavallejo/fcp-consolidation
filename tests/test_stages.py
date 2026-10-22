@@ -6,6 +6,8 @@ Estructura de cada caso (los datos reales no se suben a git):
         inputs/<id_entrada>/*.xlsx   # una carpeta por entrada de la etapa
         expected.xlsx                # resultado manual real
 
+En una entrada por fecha, cada archivo se nombra con su fecha: aaaa-mm-dd.xlsx.
+
 Una diferencia no es automáticamente un error de la herramienta: puede ser un
 error del proceso manual. Se analiza y se documenta.
 
@@ -21,7 +23,7 @@ import pytest
 from openpyxl import load_workbook
 
 from core.runner import run_stage
-from core.stage import stage_prefix
+from core.stage import input_specs, stage_prefix
 from stages import STAGES
 
 CASES_DIR = Path(__file__).parent / "cases"
@@ -86,6 +88,9 @@ def test_historical_case(stage, case: Path):
         for folder in (case / "inputs").iterdir()
         if folder.is_dir()
     }
+    for spec in input_specs(stage):
+        if spec.per_date and spec.key in files:
+            files[spec.key] = {date.fromisoformat(path.stem): path for path in files[spec.key]}
     result = run_stage(stage, files)
     obtained = read_rows(BytesIO(result.output_bytes), keep_formulas=True)
     differences = compare_rows(obtained, read_rows(case / "expected.xlsx"))

@@ -4,7 +4,10 @@ from stages.stage_02_payment_reconciliation import config
 from stages.stage_02_payment_reconciliation.process import process
 
 NAME = "Etapa 2 - Conciliación de pagos"
-DESCRIPTION = "Valida la estructura del reporte ETY de pagos procesado en la Etapa 1."
+DESCRIPTION = (
+    "Valida la estructura del reporte ETY de pagos procesado en la Etapa 1 y recibe el informe "
+    "de pago de Tesorería de cada fecha de pago del reporte."
+)
 INPUTS = config.INPUTS
 RULES = config.RULES
 APPLIED_RULES = config.APPLIED_RULES

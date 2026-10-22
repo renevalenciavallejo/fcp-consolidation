@@ -4,6 +4,10 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 2: al cargar el reporte ETY se valida su estructura y aparece un campo para cargar el informe de pago de Tesorería de cada fecha distinta de FECHA DE PAGO (las vacías se ignoran). Todos son obligatorios; por ahora solo se verifica que abran como .xlsx.
+- Entradas por fecha (`per_date` en `INPUTS`): un archivo por cada fecha distinta de una columna de otra entrada. `columns: None` indica una estructura todavía sin especificar. En la línea de comandos, cada archivo va con su fecha: `aaaa-mm-dd=ruta`.
+- El nombre de los archivos generados sale de la primera entrada de la etapa cuando esta tiene un solo archivo, aunque se carguen otros archivos de apoyo.
+
 - La etapa se elige en la barra lateral con botones de opción, todas a la vista, en lugar de una lista desplegable.
 - Etapa 2 – Conciliación de pagos: carga y validación de la estructura del archivo procesado en la Etapa 1 (25 columnas en orden, encabezados en la fila 1). Las reglas de conciliación se agregarán a medida que se especifiquen.
 - El nombre de los archivos generados ya no crece cuando el archivo de entrada trae el número de copia (`_E01_procesado_1` o `_E01_procesado (1)`).

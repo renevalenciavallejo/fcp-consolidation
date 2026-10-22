@@ -51,6 +51,13 @@ CURRENCY_FORMAT_EXCEL = '"$" #,##0.00'
 # Formato de fecha en textos (log, mensajes).
 DATE_FORMAT_TEXT = "%d/%m/%Y"
 
+# Nombres de los meses para fechas escritas en palabras («28 de junio de 2026»). Se escriben
+# aquí y no se toman del sistema operativo para que salgan en español en cualquier equipo.
+MONTH_NAMES = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+]
+
 # Ancho máximo (en caracteres) de una columna al ajustar anchos automáticamente.
 MAX_COLUMN_WIDTH = 50
 

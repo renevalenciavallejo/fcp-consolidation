@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - La arquitectura base está construida (`core/`, `app.py`, `cli.py`, pruebas). No inventar etapas ni reglas; esperar la `ESPECIFICACION.md` de cada una.
 - Etapas registradas: `stage_01_ety_cleaning` (Limpieza del reporte ETY). Un reporte por procesamiento, cualquier nombre de hoja, orden de columnas obligatorio. Implementados: validación de estructura, eliminación de las filas de título (1 a 3) conversión a moneda de las columnas E a J eliminación de las filas «Distribución Caja» (LIM-101) columna Diferencia con fórmula de Excel (TRA-101), orden por Comprobante (TRA-102), eliminación de los comprobantes con VR. BRUTO en 0 entre los registros con Diferencia 0 (LIM-102), eliminación de duplicados por Comprobante con Diferencia 0 (DUP-101/102, casos 2.1–2.4; FECHA DE PAGO, Asiento, LNP y Nº Sec Doc no se comparan) y comprobantes que siguen repetidos como Advertencia (VAL-101, después de depurar). Los demás pasos se agregan a medida que se especifican en su `ESPECIFICACION.md`.
-- `stage_02_payment_reconciliation` (Conciliación de pagos): recibe el archivo procesado en la Etapa 1 (primera hoja, encabezados en la fila 1, las 25 columnas en orden, con Diferencia en la K). Por ahora solo valida la estructura; las reglas de conciliación se agregan a medida que se especifican.
+- `stage_02_payment_reconciliation` (Conciliación de pagos): recibe el archivo procesado en la Etapa 1 (primera hoja, encabezados en la fila 1, las 25 columnas en orden, con Diferencia en la K) y, con la entrada por fecha `treasury_reports`, un informe de pago de Tesorería por cada fecha distinta de FECHA DE PAGO (todos obligatorios; las fechas vacías se ignoran). Por ahora solo valida la estructura del ETY y que cada informe abra como .xlsx (su estructura está por especificar); las reglas de conciliación se agregan a medida que se especifican.
 - `tests/stage_99_fake/` es una etapa ficticia que **solo** sirve para probar el núcleo. No registrarla en `STAGES`.
 
 ```bash
@@ -128,6 +128,8 @@ Cada entrada define: identificador, etiqueta para el usuario, si acepta varios a
 - `sheet: None`: usa la primera hoja sin validar su nombre (útil cuando el sistema que exporta cambia el nombre).
 - `allow_extra_columns` (por defecto `False`: columnas no declaradas detienen el proceso).
 - `check_column_order` (por defecto `False`): exige que las columnas estén en el orden declarado en `columns` (EST-008).
+- `per_date: {"input": <entrada>, "column": <columna>}`: entrada por fecha, con **un archivo por cada fecha distinta** de esa columna de otra entrada (declarada antes en `INPUTS`). Las fechas se toman sin la hora y las celdas vacías se ignoran. `core.runner.input_dates` valida la entrada de origen y devuelve las fechas, para que la interfaz muestre un cargador por fecha; el ejecutor recibe esos archivos como `{fecha: archivo}` y verifica (EST-007) que no falte ni sobre ninguna fecha.
+- `columns: None`: estructura todavía sin especificar; solo se verifica que el archivo abra como `.xlsx`.
 
 Al leer, el lector agrega a cada registro dos columnas internas:
 
@@ -278,7 +280,7 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
   - Salida: `<nombre del archivo original>_E<NN>_procesado.xlsx` (por ejemplo `ETY_septiembre_E01_procesado.xlsx`).
   - Log: `<nombre del archivo original>_E<NN>_log.xlsx`.
   - El nombre original sigue un estándar de nombrado y **no se modifica** (ni se recorta). Si el archivo de entrada ya trae el sufijo `_E<NN>_procesado` de una etapa anterior, se quita para que el nombre no crezca de etapa en etapa.
-  - Con varios archivos de entrada no hay un único nombre original: se usa el nombre de la etapa (`<nombre_etapa>_E<NN>_procesado.xlsx`).
+  - El nombre sale de la **primera entrada** de la etapa (las demás son de apoyo, como los informes de Tesorería de la Etapa 2). Si esa entrada tiene varios archivos no hay un único nombre original: se usa el nombre de la etapa (`<nombre_etapa>_E<NN>_procesado.xlsx`).
 
 ### 8.2 Archivo de salida
 
@@ -314,7 +316,7 @@ Flujo:
 
 1. **Barra lateral:** nombre y versión de la herramienta, y selección de la etapa con botones de opción (todas a la vista, en el orden del proceso; no una lista desplegable).
 2. **Área principal:** nombre y descripción de la etapa, y una sección plegable «Reglas que aplica esta etapa» con las reglas en orden, como lista numerada de texto (sin tabla).
-3. **Un cargador de archivos por cada entrada declarada**, con su etiqueta. Solo acepta `.xlsx` y permite varios archivos cuando la entrada lo indica.
+3. **Un cargador de archivos por cada entrada declarada**, con su etiqueta. Solo acepta `.xlsx` y permite varios archivos cuando la entrada lo indica. En una entrada por fecha (`per_date`), al cargar el archivo de origen se valida su estructura (los errores se muestran de inmediato) y aparece un cargador por fecha; Procesar se habilita cuando todas las fechas obligatorias tienen archivo.
 4. **Botón "Procesar"**, deshabilitado hasta que estén cargadas todas las entradas obligatorias. Cuando hay resultados, a su lado aparecen los botones de descarga y "Nuevo procesamiento". Los mensajes de éxito o error van justo debajo de esta fila.
 5. **Log de ejecución en vivo:** cada paso y su resultado aparecen a medida que avanzan, en un bloque que no se contrae. Si el proceso se detiene, el log queda en pantalla y muestra en qué paso falló.
 6. **Resultados:** pestañas «Log de ejecución» y «Acciones realizadas» (una sola tabla, en orden cronológico) y ruta de la copia en `output/`. No se muestran métricas.
@@ -340,7 +342,7 @@ Desactiva estadísticas de uso, limita el servidor a `localhost`, fija `maxUploa
 
 ### 9.4 Línea de comandos (`cli.py`)
 
-Solo modo no interactivo: `--stage N` y `--input <id_entrada> <archivos...>` (repetible). Guarda los resultados en `output/`, imprime el log de ejecución en vivo y las rutas de los archivos generados y termina con código 0 (éxito), 1 (error de procesamiento) o 2 (argumentos inválidos).
+Solo modo no interactivo: `--stage N` y `--input <id_entrada> <archivos...>` (repetible). En una entrada por fecha cada archivo va con su fecha: `--input treasury_reports 2026-09-22=ruta.xlsx`. Guarda los resultados en `output/`, imprime el log de ejecución en vivo y las rutas de los archivos generados y termina con código 0 (éxito), 1 (error de procesamiento) o 2 (argumentos inválidos).
 
 ## 10. Manejo de datos
 

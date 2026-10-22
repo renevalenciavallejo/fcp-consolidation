@@ -7,9 +7,9 @@ Ejecutar con: uv run streamlit run app.py
 import streamlit as st
 
 from core.errors import UNEXPECTED_ERROR_MESSAGE, log_exception
-from core.runner import StageError, run_stage, save_result
+from core.runner import StageError, input_dates, run_stage, save_result
 from core.settings import APP_NAME, APP_VERSION, DOWNLOAD_BUTTON_COLOR, DOWNLOAD_BUTTON_HOVER_COLOR
-from core.stage import applied_rules, input_specs
+from core.stage import applied_rules, date_label, input_specs
 from stages import STAGES
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -78,8 +78,73 @@ with st.expander("Reglas que aplica esta etapa"):
         for number, (code, description) in enumerate(applied_rules(stage), start=1)
     ))
 
+def load_dates(source_files: list) -> dict | StageError:
+    """Fechas de las entradas por fecha (o el error de estructura del archivo de origen).
+
+    Se guardan en session_state por archivo cargado: Streamlit vuelve a ejecutar la página
+    con cada archivo que se carga y así el reporte no se lee una y otra vez.
+    """
+    cache_key = (stage_index, tuple(getattr(f, "file_id", f.name) for f in source_files))
+    cache = st.session_state.setdefault("dates_cache", {})
+    if cache_key not in cache:
+        try:
+            cache[cache_key] = input_dates(stage, files)
+        except StageError as error:
+            cache[cache_key] = error
+        except Exception as error:
+            # Nunca mostrar un traceback: el detalle queda en errores.log. No se guarda, para reintentar.
+            log_exception(error)
+            return StageError(UNEXPECTED_ERROR_MESSAGE, [])
+    return cache[cache_key]
+
+
+def date_uploaders(spec) -> tuple[dict, bool]:
+    """Un cargador por cada fecha de la entrada de origen (por ejemplo, FECHA DE PAGO del ETY).
+
+    Devuelve {fecha: archivo cargado} y si ya está todo lo necesario para procesar: las
+    fechas se conocen (el archivo de origen está cargado y es válido) y, si la entrada es
+    obligatoria, hay un archivo por cada fecha.
+    """
+    source_key, column = spec.per_date
+    source = next(s for s in input_specs(stage) if s.key == source_key)
+    if not files[source_key]:
+        st.markdown(f"**{spec.label}**")
+        st.caption(f"Cargue primero «{source.label}»: aquí aparecerá un campo por cada fecha de {column}.")
+        return {}, False
+    dates = load_dates(files[source_key])
+    if isinstance(dates, StageError):
+        # Sin título: el error es del archivo de origen y se ve justo debajo de su cargador.
+        problems = "\n".join(f"- {p}" for p in dates.problems)
+        st.error(f"{dates.message}\n\n{problems}\n\nCorrija el archivo y vuelva a cargarlo.")
+        return {}, False
+    st.markdown(f"**{spec.label}**")
+    days = dates.get(spec.key, [])
+    if not days:
+        st.info(f"La columna {column} no tiene fechas: no se necesita ningún archivo.")
+        return {}, True
+    st.caption(f"Cargue un solo archivo .xlsx por cada fecha de {column} ({len(days)} en total).")
+    loaded = {}
+    for day in days:
+        uploaded = st.file_uploader(
+            date_label(spec, day),
+            type=["xlsx"],
+            # La fecha va en la llave: si se cambia el reporte, se conservan los archivos de las fechas que siguen.
+            key=f"upload_{stage_index}_{spec.key}_{day.isoformat()}_{st.session_state.uploader_version}",
+        )
+        if uploaded is not None:
+            loaded[day] = uploaded
+    return loaded, len(loaded) == len(days) or not spec.required
+
+
 files = {}
+# Entradas por fecha que todavía no tienen lo necesario para procesar.
+incomplete_date_inputs = []
 for spec in input_specs(stage):
+    if spec.per_date:
+        files[spec.key], complete = date_uploaders(spec)
+        if not complete:
+            incomplete_date_inputs.append(spec.key)
+        continue
     label = spec.label if spec.required else f"{spec.label} (opcional)"
     uploaded = st.file_uploader(
         label,
@@ -94,7 +159,9 @@ for spec in input_specs(stage):
     else:
         files[spec.key] = [uploaded] if uploaded is not None else []
 
-missing_required = any(spec.required and not files[spec.key] for spec in input_specs(stage))
+missing_required = bool(incomplete_date_inputs) or any(
+    spec.required and not files[spec.key] for spec in input_specs(stage) if not spec.per_date
+)
 uploaded_count = sum(len(f) for f in files.values())
 
 
