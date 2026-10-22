@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 2: si el nombre del reporte ETY no termina en `_E01_procesado`, se muestra una advertencia al cargarlo («¿Está seguro de que es el reporte ETY procesado en la Etapa 1?») y queda en el log de ejecución. No detiene el procesamiento. Nueva opción de entrada `name_suffix`.
 - Etapa 2: de cada informe de pago de Tesorería se lee la hoja Pagos (columnas obligatorias F Ejec y UN; las demás se aceptan), se toman solo los registros con UN AP656 (regla LIM-201) y se verifica que su F Ejec sea la fecha del campo donde se cargó el informe; si no coincide, se detiene sin generar resultados e indica el informe, las fechas y las filas (regla VAL-201).
 - Con `allow_extra_columns`, las columnas no declaradas pueden tener encabezados repetidos (se conserva la primera).
 - Los registros de una entrada por fecha llevan la columna interna `_input_date` con la fecha de su archivo.

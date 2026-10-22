@@ -6,7 +6,8 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-from core.runner import StageError, input_dates, run_stage
+from core.runner import StageError, file_name_warnings, input_dates, run_stage
+from core.stage import input_specs
 from core.stage import applied_rules
 from stages import STAGES, stage_01_ety_cleaning, stage_02_payment_reconciliation
 from tests.helpers import make_xlsx
@@ -215,3 +216,42 @@ def test_each_treasury_report_is_checked_against_its_own_date():
     problem = error.value.problems[0]
     assert "«tesoreria_29.xlsx» se cargó como informe del 29/09/2026" in problem
     assert "(filas 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 y 2 más)" in problem
+
+
+def ety_spec():
+    return next(spec for spec in input_specs(stage_02_payment_reconciliation) if spec.key == "ety_processed")
+
+
+@pytest.mark.parametrize("name", [
+    "ETY_sept_E01_procesado.xlsx",
+    "ETY_sept_E01_procesado_1.xlsx",       # Copia en output/
+    "ETY_sept_E01_procesado (2).xlsx",     # Copia del navegador
+    "ETY_sept_e01_PROCESADO.xlsx",
+])
+def test_stage_1_file_name_has_no_warning(name):
+    assert file_name_warnings(ety_spec(), [make_xlsx([["x"]], name=name)]) == []
+
+
+@pytest.mark.parametrize("name", ["ETY_sept.xlsx", "ETY_sept_E02_procesado.xlsx", "ETY_E01_procesado_final.xlsx"])
+def test_other_file_names_get_a_warning(name):
+    assert file_name_warnings(ety_spec(), [make_xlsx([["x"]], name=name)]) == [
+        f"El nombre de «{name}» no termina en «_E01_procesado». "
+        "¿Está seguro de que es el reporte ETY procesado en la Etapa 1?"
+    ]
+
+
+def test_file_name_warning_does_not_stop_processing_and_is_logged():
+    file = stage_1_output()
+    file.name = "ETY_sept.xlsx"
+    result = run(file)
+    steps = {step.title: step.details for step in result.audit.steps}
+    assert steps["Verificando archivos cargados"][1] == (
+        "✗ Advertencia: El nombre de «ETY_sept.xlsx» no termina en «_E01_procesado». "
+        "¿Está seguro de que es el reporte ETY procesado en la Etapa 1?"
+    )
+    assert result.output_file_name == "ETY_sept_E02_procesado.xlsx"
+
+
+def test_treasury_reports_have_no_name_warning():
+    result = run(stage_1_output())
+    assert not any("Advertencia" in line for line in result.audit.step_lines())

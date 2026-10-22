@@ -130,6 +130,7 @@ Cada entrada define: identificador, etiqueta para el usuario, si acepta varios a
 - `check_column_order` (por defecto `False`): exige que las columnas estén en el orden declarado en `columns` (EST-008).
 - `per_date: {"input": <entrada>, "column": <columna>}`: entrada por fecha, con **un archivo por cada fecha distinta** de esa columna de otra entrada (declarada antes en `INPUTS`). Las fechas se toman sin la hora y las celdas vacías se ignoran. `core.runner.input_dates` valida la entrada de origen y devuelve las fechas, para que la interfaz muestre un cargador por fecha; el ejecutor recibe esos archivos como `{fecha: archivo}` y verifica (EST-007) que no falte ni sobre ninguna fecha. Cada registro leído lleva en la columna interna `_input_date` la fecha de su archivo, para que la etapa la compare con los datos.
 - `columns: None`: estructura todavía sin especificar; solo se verifica que el archivo abra como `.xlsx`.
+- `name_suffix` (por ejemplo `"_E01_procesado"`): final esperado del nombre del archivo (sin distinguir mayúsculas; se acepta el número de copia `_1` o ` (1)`). Si no lo tiene, `core.runner.file_name_warnings` genera una advertencia que la interfaz muestra al cargar el archivo y el ejecutor deja en el log de ejecución. No detiene el proceso.
 
 Al leer, el lector agrega a cada registro dos columnas internas:
 
@@ -316,7 +317,7 @@ Flujo:
 
 1. **Barra lateral:** nombre y versión de la herramienta, y selección de la etapa con botones de opción (todas a la vista, en el orden del proceso; no una lista desplegable).
 2. **Área principal:** nombre y descripción de la etapa, y una sección plegable «Reglas que aplica esta etapa» con las reglas en orden, como lista numerada de texto (sin tabla).
-3. **Un cargador de archivos por cada entrada declarada**, con su etiqueta. Solo acepta `.xlsx` y permite varios archivos cuando la entrada lo indica. En una entrada por fecha (`per_date`), al cargar el archivo de origen se valida su estructura (los errores se muestran de inmediato) y aparece un cargador por fecha; Procesar se habilita cuando todas las fechas obligatorias tienen archivo.
+3. **Un cargador de archivos por cada entrada declarada**, con su etiqueta. Solo acepta `.xlsx` y permite varios archivos cuando la entrada lo indica. En una entrada por fecha (`per_date`), al cargar el archivo de origen se valida su estructura (los errores se muestran de inmediato) y aparece un cargador por fecha; Procesar se habilita cuando todas las fechas obligatorias tienen archivo. Si el nombre de un archivo no termina como se espera (`name_suffix`), aparece una advertencia (`st.warning`) debajo de su cargador, sin bloquear Procesar.
 4. **Botón "Procesar"**, deshabilitado hasta que estén cargadas todas las entradas obligatorias. Cuando hay resultados, a su lado aparecen los botones de descarga y "Nuevo procesamiento". Los mensajes de éxito o error van justo debajo de esta fila.
 5. **Log de ejecución en vivo:** cada paso y su resultado aparecen a medida que avanzan, en un bloque que no se contrae. Si el proceso se detiene, el log queda en pantalla y muestra en qué paso falló.
 6. **Resultados:** pestañas «Log de ejecución» y «Acciones realizadas» (una sola tabla, en orden cronológico) y ruta de la copia en `output/`. No se muestran métricas.

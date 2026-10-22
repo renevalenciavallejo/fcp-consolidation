@@ -13,6 +13,7 @@ La etapa recibe dos tipos de archivo: el reporte ETY procesado en la Etapa 1 y u
 | Hoja | La primera hoja del archivo (la Etapa 1 conserva el nombre del reporte original, por ejemplo `sheet1`; el nombre no se valida) |
 | Fila de encabezados | 1 (la Etapa 1 ya quitó las filas de título) |
 | Datos | Desde la fila 2 |
+| Nombre | Debe terminar en `_E01_procesado` (se acepta el número de copia: `_1` o ` (1)`). Si no, se advierte pero no se detiene |
 
 Columnas obligatorias (25), exactamente en este orden: las 24 del reporte ETY con la columna **Diferencia** en la K, a la derecha de Importe.
 
@@ -44,6 +45,7 @@ Si el archivo no cumple, el procesamiento se detiene sin generar resultados y se
 | Código | Validación |
 | --- | --- |
 | EST-007 | Se cargó exactamente un archivo |
+| — | Advertencia (no detiene): el nombre del archivo no termina en `_E01_procesado`. Al cargarlo, la interfaz pregunta «¿Está seguro de que es el reporte ETY procesado en la Etapa 1?», y el aviso queda en el log de ejecución |
 | EST-001 | El archivo se puede abrir como Excel (.xlsx) |
 | EST-003 | Están las 25 columnas en la fila 1 (si los encabezados están en otra fila, se indica en cuál; por ejemplo, si se carga el reporte original sin pasar por la Etapa 1) |
 | EST-004 | No hay columnas adicionales |

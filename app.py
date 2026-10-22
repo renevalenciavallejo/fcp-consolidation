@@ -7,7 +7,7 @@ Ejecutar con: uv run streamlit run app.py
 import streamlit as st
 
 from core.errors import UNEXPECTED_ERROR_MESSAGE, log_exception
-from core.runner import StageError, input_dates, run_stage, save_result
+from core.runner import StageError, file_name_warnings, input_dates, run_stage, save_result
 from core.settings import APP_NAME, APP_VERSION, DOWNLOAD_BUTTON_COLOR, DOWNLOAD_BUTTON_HOVER_COLOR
 from core.stage import applied_rules, date_label, input_specs
 from stages import STAGES
@@ -158,6 +158,8 @@ for spec in input_specs(stage):
         files[spec.key] = list(uploaded or [])
     else:
         files[spec.key] = [uploaded] if uploaded is not None else []
+    for warning in file_name_warnings(spec, files[spec.key]):
+        st.warning(warning, icon=":material/warning:")
 
 missing_required = bool(incomplete_date_inputs) or any(
     spec.required and not files[spec.key] for spec in input_specs(stage) if not spec.per_date

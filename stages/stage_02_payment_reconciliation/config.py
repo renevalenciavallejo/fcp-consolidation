@@ -9,6 +9,8 @@ INPUTS = {
         "sheet": None,          # None = primera hoja; la Etapa 1 conserva el nombre del reporte original
         "header_row": 1,        # La Etapa 1 ya quitó las filas de título
         "check_column_order": True,   # Las columnas deben estar en el orden en que las deja la Etapa 1
+        # Final del nombre que pone la Etapa 1. Si no lo tiene, se advierte (no se detiene).
+        "name_suffix": "_E01_procesado",
         # Columnas del archivo de salida de la Etapa 1, en orden, y su tipo:
         # "text", "code", "number", "currency" (moneda), "date".
         "columns": {

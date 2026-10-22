@@ -91,6 +91,10 @@ def run_stage(
     names = [file_name(f) for spec in specs for f in _files_of(spec, files)]
     audit.multiple_files = len(names) > 1
     audit.note(f"{'1 archivo' if len(names) == 1 else f'{len(names)} archivos'}: {', '.join(names)}")
+    # Un nombre inesperado no detiene el proceso (el usuario pudo renombrar el archivo), pero queda en el log.
+    for spec in specs:
+        for warning in file_name_warnings(spec, _files_of(spec, files)):
+            audit.note(f"Advertencia: {warning}", ok=False)
 
     # 2 y 3. Lectura y validación estricta, archivo por archivo
     read_results: dict[str, list[ReadResult]] = {}
@@ -163,6 +167,24 @@ def result_file_names(stage: ModuleType, input_names: list[str]) -> tuple[str, s
     else:
         base = stage_name
     return f"{base}_{code}_procesado.xlsx", f"{base}_{code}_log.xlsx"
+
+
+def file_name_warnings(spec: InputSpec, files: list[Any]) -> list[str]:
+    """Advertencias por archivos cuyo nombre no termina como se espera (`name_suffix`).
+
+    Sirve para detectar a tiempo que se cargó un archivo equivocado, por ejemplo el reporte
+    original en lugar del procesado en la etapa anterior. Se acepta el número de copia que
+    agregan output/ («_1») o el navegador («(1)»). No detiene el procesamiento.
+    """
+    if not spec.name_suffix:
+        return []
+    pattern = re.escape(spec.name_suffix) + r"(_\d+| \(\d+\))?$"
+    return [
+        f"El nombre de «{file_name(f)}» no termina en «{spec.name_suffix}». "
+        f"¿Está seguro de que es el {spec.label[0].lower()}{spec.label[1:]}?"
+        for f in files
+        if not re.search(pattern, Path(file_name(f)).stem, re.IGNORECASE)
+    ]
 
 
 def output_formats(specs: list) -> dict[str, str]:
