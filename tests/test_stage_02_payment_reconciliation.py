@@ -25,9 +25,24 @@ def stage_1_output(rows=distinct(ROW, ROW)):
 PAYMENT_DAY = date(2026, 9, 28)
 
 
-def treasury_report(name="tesoreria_28.xlsx"):
-    """Informe de pago de Tesorería. Su estructura todavía no está especificada."""
-    return make_xlsx([["Columna"], ["valor"]], name=name)
+# Encabezados de la hoja Pagos del informe de Tesorería (las primeras columnas y «Nº Cuenta»,
+# que viene repetida en el informe real).
+PAYMENT_COLUMNS = ["F Ejec", "UN", "NEGOCIO", "Nº Cuenta", "Comprobante", "Nº Cuenta"]
+
+
+def payment(day=datetime(2026, 9, 28, 2, 0), unit="AP656"):
+    """Registro de la hoja Pagos: la F Ejec trae hora, como en el informe real."""
+    return [day, unit, "NEGOCIOS", "001", "00153417", "002"]
+
+
+def treasury_report(name="tesoreria_28.xlsx", payments=None):
+    """Informe de pago de Tesorería: RESUMEN en la primera hoja y los pagos en la hoja Pagos."""
+    if payments is None:
+        payments = [payment(), payment(unit="AP198"), payment(day=datetime(2026, 9, 29), unit="AP198")]
+    return make_xlsx(
+        [["CICLO DE PAGOS"], ["NEGOCIOS"]], sheet="RESUMEN", name=name,
+        extra_sheets={"Pagos": [PAYMENT_COLUMNS, *payments]},
+    )
 
 
 def with_date(row, value):
@@ -52,7 +67,8 @@ def test_expected_columns_are_the_stage_1_output():
 
 def test_stage_1_output_is_accepted():
     result = run(stage_1_output())
-    assert result.summary.rows_read == 2 and result.summary.rows_output == 2
+    # Se leen los 2 registros del ETY y los 3 de la hoja Pagos del informe; la salida es el ETY.
+    assert result.summary.rows_read == 5 and result.summary.rows_output == 2
     assert result.output_file_name == "ETY_sept_E02_procesado.xlsx"
     sheet = load_workbook(BytesIO(result.output_bytes)).active
     assert sheet.title == "sheet1" and [c.value for c in sheet[1]] == OUTPUT_COLUMNS
@@ -79,9 +95,12 @@ def test_only_one_file_allowed():
     assert any("EST-007" in p and "un solo archivo" in p for p in error.value.problems)
 
 
-def test_applied_rules_are_structure_rules():
+def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_02_payment_reconciliation)]
-    assert codes == ["EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008"]
+    assert codes == [
+        "EST-007", "EST-001", "EST-002", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",
+        "LIM-201", "VAL-201",
+    ]
 
 
 def test_payment_dates_are_unique_sorted_and_ignore_empty_cells():
@@ -132,3 +151,67 @@ def test_treasury_report_that_is_not_xlsx_is_rejected():
     with pytest.raises(StageError) as error:
         run(stage_1_output(), treasury={PAYMENT_DAY: file})
     assert any("EST-001" in p and "tesoreria.xlsx" in p for p in error.value.problems)
+
+
+def test_treasury_report_without_payments_sheet_is_rejected():
+    with pytest.raises(StageError) as error:
+        run(stage_1_output(), treasury={PAYMENT_DAY: make_xlsx([["F Ejec", "UN"]], name="t.xlsx")})
+    assert any("EST-002" in p and "'Pagos'" in p for p in error.value.problems)
+
+
+def test_treasury_report_needs_execution_date_and_business_unit():
+    file = make_xlsx([["x"]], sheet="RESUMEN", name="t.xlsx", extra_sheets={"Pagos": [["F Ejec", "Otra"]]})
+    with pytest.raises(StageError) as error:
+        run(stage_1_output(), treasury={PAYMENT_DAY: file})
+    assert any("EST-003" in p and "'UN'" in p for p in error.value.problems)
+
+
+def test_only_business_unit_ap656_is_checked():
+    # Los pagos de otras unidades (AP198 del 29/09) no se validan: solo se cuentan.
+    result = run(stage_1_output())
+    steps = {step.title: step.details for step in result.audit.steps}
+    assert steps["Tomando de los informes de pago los registros con UN AP656"] == [
+        "✓ tesoreria_28.xlsx: 1 de 3 registros con UN AP656"
+    ]
+    assert steps["Verificando que la F Ejec corresponda a la fecha de cada informe"] == [
+        "✓ tesoreria_28.xlsx: 1 registros del 28/09/2026"
+    ]
+    # Filtrar el informe no cambia el reporte ETY ni deja acciones en el log.
+    assert result.summary.rows_output == 2 and result.audit.actions == []
+
+
+def test_business_unit_ignores_case_and_spaces():
+    report = treasury_report(payments=[payment(unit=" ap656 ")])
+    result = run(stage_1_output(), treasury={PAYMENT_DAY: report})
+    steps = {step.title: step.details for step in result.audit.steps}
+    assert steps["Tomando de los informes de pago los registros con UN AP656"] == [
+        "✓ tesoreria_28.xlsx: 1 de 1 registros con UN AP656"
+    ]
+
+
+def test_execution_date_different_from_the_loaded_date_stops_processing():
+    # Informe del 29/09 cargado en el campo del 28/09.
+    payments = [payment(datetime(2026, 9, 29, 2, 0)), payment(), payment(None), payment(datetime(2026, 9, 29))]
+    with pytest.raises(StageError) as error:
+        run(stage_1_output(), treasury={PAYMENT_DAY: treasury_report(payments=payments)})
+    assert error.value.message == "La F Ejec de 1 informe de pago no coincide con la fecha del campo donde se cargó."
+    assert error.value.problems == [
+        "[VAL-201] «tesoreria_28.xlsx» se cargó como informe del 28/09/2026, pero 3 de sus 4 registros "
+        "con UN AP656 tienen otra F Ejec: 29/09/2026 en 2 registros (filas 2, 5); vacía o no válida en "
+        "1 registro (fila 4). Verifique que cargó el informe en el campo de su fecha."
+    ]
+    assert "▸ Verificando que la F Ejec corresponda a la fecha de cada informe" in error.value.steps
+
+
+def test_each_treasury_report_is_checked_against_its_own_date():
+    rows = distinct(ROW, with_date(ROW, datetime(2026, 9, 29)))
+    treasury = {
+        PAYMENT_DAY: treasury_report(),
+        date(2026, 9, 29): treasury_report("tesoreria_29.xlsx", [payment(datetime(2026, 9, 28))] * 12),
+    }
+    with pytest.raises(StageError) as error:
+        run(stage_1_output(rows), treasury=treasury)
+    assert len(error.value.problems) == 1
+    problem = error.value.problems[0]
+    assert "«tesoreria_29.xlsx» se cargó como informe del 29/09/2026" in problem
+    assert "(filas 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 y 2 más)" in problem

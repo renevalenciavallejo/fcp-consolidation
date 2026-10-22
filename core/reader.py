@@ -103,6 +103,10 @@ def read_file(file: Any, spec: InputSpec) -> ReadResult:
                 problems.append(f"[EST-006] {name}: la columna {letter} tiene datos pero no tiene encabezado.")
             continue
         if title in positions:
+            # Una columna que la etapa no usa puede repetirse cuando se aceptan columnas adicionales:
+            # se conserva la primera y su copia no se lee.
+            if spec.allow_extra_columns and title not in spec.columns:
+                continue
             problems.append(f"[EST-005] {name}: el encabezado '{title}' está repetido.")
             continue
         positions[title] = position

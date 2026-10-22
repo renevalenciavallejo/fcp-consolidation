@@ -65,3 +65,4 @@ MAX_COLUMN_WIDTH = 50
 INTERNAL_PREFIX = "_"
 SOURCE_FILE = "_source_file"   # Nombre del archivo del que proviene el registro
 SOURCE_ROW = "_source_row"     # Fila real del registro en ese archivo de Excel
+INPUT_DATE = "_input_date"     # Fecha del campo donde se cargó el archivo (entradas por fecha)

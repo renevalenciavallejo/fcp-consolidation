@@ -4,6 +4,9 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 2: de cada informe de pago de Tesorería se lee la hoja Pagos (columnas obligatorias F Ejec y UN; las demás se aceptan), se toman solo los registros con UN AP656 (regla LIM-201) y se verifica que su F Ejec sea la fecha del campo donde se cargó el informe; si no coincide, se detiene sin generar resultados e indica el informe, las fechas y las filas (regla VAL-201).
+- Con `allow_extra_columns`, las columnas no declaradas pueden tener encabezados repetidos (se conserva la primera).
+- Los registros de una entrada por fecha llevan la columna interna `_input_date` con la fecha de su archivo.
 - Etapa 2: al cargar el reporte ETY se valida su estructura y aparece un campo para cargar el informe de pago de Tesorería de cada fecha distinta de FECHA DE PAGO (las vacías se ignoran). Todos son obligatorios; por ahora solo se verifica que abran como .xlsx.
 - Entradas por fecha (`per_date` en `INPUTS`): un archivo por cada fecha distinta de una columna de otra entrada. `columns: None` indica una estructura todavía sin especificar. En la línea de comandos, cada archivo va con su fecha: `aaaa-mm-dd=ruta`.
 - El nombre de los archivos generados sale de la primera entrada de la etapa cuando esta tiene un solo archivo, aunque se carguen otros archivos de apoyo.

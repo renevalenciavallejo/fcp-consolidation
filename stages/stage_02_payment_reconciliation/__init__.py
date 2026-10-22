@@ -6,7 +6,8 @@ from stages.stage_02_payment_reconciliation.process import process
 NAME = "Etapa 2 - Conciliación de pagos"
 DESCRIPTION = (
     "Valida la estructura del reporte ETY de pagos procesado en la Etapa 1 y recibe el informe "
-    "de pago de Tesorería de cada fecha de pago del reporte."
+    "de pago de Tesorería de cada fecha de pago del reporte. De cada informe toma los pagos con "
+    "UN AP656 y verifica que su F Ejec sea la fecha del campo donde se cargó."
 )
 INPUTS = config.INPUTS
 RULES = config.RULES

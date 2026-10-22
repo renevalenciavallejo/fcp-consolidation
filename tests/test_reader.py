@@ -65,6 +65,16 @@ def test_repeated_header_and_data_without_header():
     assert any("EST-006" in p and "columna D" in p for p in problems)
 
 
+def test_repeated_extra_column_is_allowed_when_extra_columns_are():
+    # Un encabezado repetido se tolera solo si es una columna que la etapa no usa.
+    spec = InputSpec(**{**SPEC.__dict__, "allow_extra_columns": True})
+    result = read_file(make_xlsx([["Codigo", "Cuenta", "Valor", "Cuenta"], ["1", "A", 1, "B"]]), spec)
+    assert result.problems == []
+    assert result.data.at[0, "Cuenta"] == "A"  # Se conserva la primera
+    repeated = read_file(make_xlsx([["Codigo", "Valor", "Valor"], ["1", 1, 2]]), spec).problems
+    assert any("EST-005" in p for p in repeated)
+
+
 def test_not_an_excel_file():
     from io import BytesIO
 

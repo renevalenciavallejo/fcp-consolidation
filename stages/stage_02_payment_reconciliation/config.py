@@ -45,20 +45,43 @@ INPUTS = {
         # Todas las fechas son obligatorias.
         "per_date": {"input": "ety_processed", "column": "FECHA DE PAGO"},
         "required": True,
-        "sheet": None,          # None = primera hoja
+        "sheet": "Pagos",       # Segunda pestaña del informe; las demás (RESUMEN, H3) no se usan
         "header_row": 1,
-        # Estructura por especificar: por ahora solo se verifica que cada archivo abra como .xlsx.
-        "columns": None,
+        # Solo se exigen las columnas que usa la etapa. El informe trae muchas más (y alguna
+        # repetida, como «Nº Cuenta»), que se aceptan sin validarlas.
+        "allow_extra_columns": True,
+        "columns": {
+            "F Ejec": "date",
+            "UN": "code",
+        },
     },
 }
 
-# Reglas propias de la etapa (serie 2xx). Se agregan a medida que se especifiquen.
-RULES = {}
+# Columna del informe de pago con la unidad de negocio de cada pago.
+BUSINESS_UNIT_COLUMN = "UN"
+
+# Unidad de negocio del FCP: el informe de Tesorería trae los pagos de todas las unidades.
+BUSINESS_UNIT = "AP656"
+
+# Columna del informe de pago con la fecha de ejecución del pago.
+EXECUTION_DATE_COLUMN = "F Ejec"
+
+# Cuántas filas se nombran como ejemplo en un mensaje de error; las demás solo se cuentan.
+MAX_ROWS_IN_MESSAGE = 10
+
+# Reglas propias de la etapa (serie 2xx).
+RULES = {
+    "LIM-201": "Tomar de cada informe de pago solo los registros con UN AP656",
+    "VAL-201": (
+        "Validar que la F Ejec de esos registros sea la fecha del campo donde se cargó el informe "
+        "(si no, se detiene sin generar resultados)"
+    ),
+}
 
 # Todas las reglas que aplica la etapa, en el orden en que se aplican. Es la lista que el
 # usuario consulta en la interfaz y en la hoja Reglas del log.
-# EST-002 no aplica: se usa la primera hoja sin importar su nombre.
+# EST-002 aplica a los informes de pago (hoja Pagos); el reporte ETY usa su primera hoja.
 APPLIED_RULES = [
-    "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",  # Estructura
+    "EST-007", "EST-001", "EST-002", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",  # Estructura
     *RULES,
 ]

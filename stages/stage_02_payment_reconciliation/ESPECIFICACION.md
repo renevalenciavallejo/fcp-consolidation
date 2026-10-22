@@ -27,7 +27,11 @@ Documento, Nº Sec Doc, Más Info, Dpto, Cd Fnd, Subfideicomiso, Cuenta, Proy, P
 | Archivo | El informe de pagos que remite la Tesorería para una fecha |
 | Cantidad | Uno por cada fecha distinta de la columna **FECHA DE PAGO** (D) del reporte ETY, todos obligatorios. Normalmente hasta 5 (pagos de una semana, en días hábiles) |
 | Fechas | Se toma solo el día (sin la hora). Las celdas vacías se ignoran (no piden informe) |
-| Estructura | **Por especificar.** Por ahora solo se verifica que cada archivo abra como .xlsx |
+| Hoja | `Pagos` (la segunda pestaña; RESUMEN y H3 no se usan) |
+| Fila de encabezados | 1 |
+| Datos | Desde la fila 2 (las filas vacías del final se ignoran) |
+
+Columnas obligatorias: **F Ejec** (fecha de ejecución del pago) y **UN** (unidad de negocio), en cualquier posición. El informe trae muchas más columnas (Factura, Comprobante, Impt Neto Pago, …), que se aceptan sin validarlas; algunas vienen repetidas, como «Nº Cuenta», y eso tampoco es un error. Un encabezado repetido sí es error si es F Ejec o UN.
 
 En la interfaz, al cargar el reporte ETY se valida su estructura (Paso 1) y, si es correcta, aparece un campo de carga por cada fecha de pago, con la fecha en la etiqueta («Informe de pago del 22 de septiembre de 2026»). Si el reporte tiene errores de estructura, se muestran de inmediato y no aparecen los campos. El botón Procesar se habilita cuando todas las fechas tienen su informe.
 
@@ -53,10 +57,27 @@ Si el archivo no cumple, el procesamiento se detiene sin generar resultados y se
 | --- | --- |
 | EST-007 | Hay un informe por cada fecha de pago del reporte ETY y ninguno de una fecha que no esté en el reporte |
 | EST-001 | Cada informe se puede abrir como Excel (.xlsx) |
+| EST-002 | Cada informe tiene la hoja `Pagos` |
+| EST-003 | La hoja Pagos tiene las columnas F Ejec y UN en la fila 1 |
+| EST-005 | F Ejec y UN no están repetidas |
+| EST-006 | No hay columnas con datos sin encabezado |
+
+### Paso 3 – Pagos del FCP (implementado)
+
+| Código | Regla |
+| --- | --- |
+| LIM-201 | De cada informe se toman solo los registros con **UN** `AP656` (sin distinguir mayúsculas ni espacios sobrantes). Los de otras unidades de negocio no se usan. En el log de ejecución se indica cuántos se tomaron de cada informe («130 de 463 registros con UN AP656»); no se listan uno a uno. El reporte ETY no cambia |
+
+### Paso 4 – Fecha de los informes (implementado)
+
+| Código | Validación |
+| --- | --- |
+| VAL-201 | La **F Ejec** de cada registro con UN AP656 (solo el día, sin la hora) es la fecha del campo donde se cargó el informe |
+
+Si algún registro tiene otra fecha (o la tiene vacía o no válida), el procesamiento **se detiene sin generar resultados**: casi siempre significa que el informe se cargó en el campo de otra fecha. El mensaje indica el informe, la fecha del campo, las fechas encontradas y las filas de la hoja Pagos (hasta 10 por fecha; las demás se cuentan). Se revisan todos los informes antes de detenerse, para mostrar todos los problemas de una vez.
 
 ### Pasos siguientes (por especificar)
 
-- Estructura de los informes de pago de Tesorería y su validación (incluida la verificación de que cada informe corresponda a su fecha).
 - Reglas de conciliación de pagos.
 
 ## Archivo de salida
@@ -67,4 +88,5 @@ Por ahora, los mismos registros del reporte ETY, con la misma apariencia. El nom
 
 ## Tareas manuales
 
-Por definir.
+- Si el procesamiento se detiene por VAL-201, cargar cada informe en el campo de su fecha (o pedir a Tesorería el informe correcto) y procesar de nuevo.
+- Las demás, por definir.

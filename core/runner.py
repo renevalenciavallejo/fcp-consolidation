@@ -20,7 +20,7 @@ from core.audit import AuditLog
 from core.cleaning import parse_date
 from core.log_report import InputFileInfo, RunSummary, build_log
 from core.reader import ReadResult, combine, file_name, read_file
-from core.settings import CURRENCY_FORMAT_EXCEL, DATE_FORMAT_TEXT, OUTPUT_DIR
+from core.settings import CURRENCY_FORMAT_EXCEL, DATE_FORMAT_TEXT, INPUT_DATE, OUTPUT_DIR
 from core.stage import InputSpec, applied_rules, date_label, input_specs, stage_prefix, stage_rules
 from core.writer import SheetStyle, build_output
 
@@ -229,7 +229,8 @@ def read_and_report(file: Any, spec, audit: AuditLog, day: date | None = None) -
     if not result.problems:
         order = " en el orden esperado" if spec.check_column_order else ""
         records = "1 registro" if result.rows == 1 else f"{result.rows} registros"
-        audit.note(f"{len(spec.columns)} columnas{order}, {records}")
+        required = " obligatorias" if spec.allow_extra_columns else ""
+        audit.note(f"{len(spec.columns)} columnas{required}{order}, {records}")
     return result
 
 
@@ -281,7 +282,9 @@ def read_per_date(
 
     Las fechas salen de la columna configurada en `per_date`. Si falta el archivo de
     una fecha obligatoria, o se cargó uno de una fecha que no está en el origen, se
-    detiene sin generar resultados. Regla EST-007.
+    detiene sin generar resultados. Regla EST-007. Cada registro leído lleva en la
+    columna interna `_input_date` la fecha de su archivo, para que la etapa pueda
+    compararla con los datos.
     """
     source_key, column = spec.per_date
     days = dates_in(inputs[source_key], column)
@@ -303,7 +306,11 @@ def read_per_date(
         audit.note(f"La columna {column} no tiene fechas: no se necesita ningún archivo")
     for day in days:
         audit.note(f"{day.strftime(DATE_FORMAT_TEXT)}: {file_name(files[day])}")
-    return [read_and_report(files[day], spec, audit, day) for day in days]
+    results = [read_and_report(files[day], spec, audit, day) for day in days]
+    for day, result in zip(days, results):
+        if result.data is not None:
+            result.data[INPUT_DATE] = day
+    return results
 
 
 def _spec(specs: list[InputSpec], key: str) -> InputSpec:
