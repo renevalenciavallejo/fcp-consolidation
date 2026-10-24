@@ -55,6 +55,8 @@ INPUTS = {
         "columns": {
             "F Ejec": "date",
             "UN": "code",
+            "Comprobante": "code",      # Columna P
+            "Impt Bruto": "currency",   # Columna T
         },
     },
 }
@@ -68,6 +70,13 @@ BUSINESS_UNIT = "AP656"
 # Columna del informe de pago con la fecha de ejecución del pago.
 EXECUTION_DATE_COLUMN = "F Ejec"
 
+# Columna del informe de pago que identifica cada pago: un comprobante repetido en un
+# informe es el mismo pago (por ejemplo, partido en dos transferencias).
+PAYMENT_VOUCHER_COLUMN = "Comprobante"
+
+# Columna del informe de pago con el valor bruto del pago, que se totaliza.
+PAYMENT_GROSS_COLUMN = "Impt Bruto"
+
 # Cuántas filas se nombran como ejemplo en un mensaje de error; las demás solo se cuentan.
 MAX_ROWS_IN_MESSAGE = 10
 
@@ -78,6 +87,11 @@ RULES = {
         "Validar que la F Ejec de esos registros sea la fecha del campo donde se cargó el informe "
         "(si no, se detiene sin generar resultados)"
     ),
+    "DUP-201": (
+        "Dejar un solo registro por Comprobante en cada informe de pago (se conserva el primero; "
+        "solo en memoria, el informe no se modifica)"
+    ),
+    "TRA-201": "Calcular el total de Impt Bruto de cada informe de pago y de todos los informes",
 }
 
 # Todas las reglas que aplica la etapa, en el orden en que se aplican. Es la lista que el
@@ -85,5 +99,7 @@ RULES = {
 # EST-002 aplica a los informes de pago (hoja Pagos); el reporte ETY usa su primera hoja.
 APPLIED_RULES = [
     "EST-007", "EST-001", "EST-002", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",  # Estructura
-    *RULES,
+    "LIM-201", "VAL-201",
+    "TIP-003", "TIP-005",   # Comprobante como código e Impt Bruto como moneda
+    "DUP-201", "TRA-201",
 ]

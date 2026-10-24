@@ -109,6 +109,9 @@ def run_stage(
         if spec.per_date:
             read_results[spec.key] = read_per_date(spec, files.get(spec.key) or {}, inputs, audit)
             inputs[spec.key] = combine(read_results[spec.key], spec)
+            if INPUT_DATE not in inputs[spec.key].columns:
+                # Sin fechas no hay archivos y la tabla llega vacía: la etapa igual puede usar la columna.
+                inputs[spec.key][INPUT_DATE] = pd.Series(dtype=object)
     _stop_on_structure_problems(read_results, files, audit)
     inputs = {spec.key: inputs[spec.key] for spec in specs}  # En el orden en que se declararon
     for data in inputs.values():

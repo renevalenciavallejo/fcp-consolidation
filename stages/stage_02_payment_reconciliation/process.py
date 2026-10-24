@@ -11,23 +11,37 @@ from typing import Any
 
 import pandas as pd
 
-from core.audit import AuditLog
-from core.cleaning import comparable_text, parse_date
+from core.audit import AuditLog, is_empty
+from core.cleaning import comparable_text, convert_columns, parse_date
 from core.runner import StageError
 from core.settings import DATE_FORMAT_TEXT, INPUT_DATE, SOURCE_FILE, SOURCE_ROW
 from stages.stage_02_payment_reconciliation.config import (
     BUSINESS_UNIT,
     BUSINESS_UNIT_COLUMN,
     EXECUTION_DATE_COLUMN,
+    INPUTS,
     MAX_ROWS_IN_MESSAGE,
+    PAYMENT_GROSS_COLUMN,
+    PAYMENT_VOUCHER_COLUMN,
 )
+
+# Tipo de cada columna obligatoria del informe de pago, según config.INPUTS.
+PAYMENT_COLUMN_TYPES = INPUTS["treasury_reports"]["columns"]
 
 
 def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
+    # Los informes de pago solo se depuran en memoria: no hacen parte del archivo de salida
+    # y el archivo original nunca se modifica.
     audit.step(f"Tomando de los informes de pago los registros con {BUSINESS_UNIT_COLUMN} {BUSINESS_UNIT}")
     payments = filter_business_unit(inputs["treasury_reports"], audit)
     audit.step(f"Verificando que la {EXECUTION_DATE_COLUMN} corresponda a la fecha de cada informe")
     check_execution_dates(payments, audit)
+    audit.step(f"Convirtiendo {PAYMENT_VOUCHER_COLUMN} a código e {PAYMENT_GROSS_COLUMN} a moneda")
+    payments = convert_payment_columns(payments, audit)
+    audit.step(f"Dejando un solo registro por {PAYMENT_VOUCHER_COLUMN} en cada informe de pago")
+    payments = remove_repeated_vouchers(payments, audit)
+    audit.step(f"Calculando el total de {PAYMENT_GROSS_COLUMN}")
+    report_gross_totals(payments, audit)
     return inputs["ety_processed"]
 
 
@@ -71,6 +85,79 @@ def check_execution_dates(df: pd.DataFrame, audit: AuditLog) -> None:
             f"La {EXECUTION_DATE_COLUMN} de {count} de pago no coincide con la fecha del campo donde se cargó."
         )
         raise StageError(message, problems, audit.step_lines())
+
+
+def convert_payment_columns(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
+    """Comprobante como código (TIP-003) e Impt Bruto como moneda (TIP-005).
+
+    Así «00157395» y 157395 se reconocen como el mismo comprobante y el total se calcula
+    sobre números. Un Impt Bruto que no es número queda como estaba y se reporta como Error.
+    """
+    columns = [PAYMENT_VOUCHER_COLUMN, PAYMENT_GROSS_COLUMN]
+    return convert_columns(df, {c: PAYMENT_COLUMN_TYPES[c] for c in columns}, audit)
+
+
+def remove_repeated_vouchers(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
+    """Deja un solo registro por Comprobante dentro de cada informe de pago. Regla DUP-201.
+
+    Un comprobante repetido es el mismo pago (por ejemplo, partido en dos transferencias
+    con el mismo Impt Bruto): sumarlo dos veces inflaría el total. Se conserva el primero
+    y cada descartado queda en la hoja Acciones con la fila del que se conservó. Los
+    registros sin comprobante no se comparan entre sí. Se hace en memoria: el informe
+    original no se modifica.
+    """
+    key = [SOURCE_FILE, PAYMENT_VOUCHER_COLUMN]
+    has_voucher = ~df[PAYMENT_VOUCHER_COLUMN].map(is_empty).astype(bool)
+    repeated = df.duplicated(subset=key, keep="first") & has_voucher
+    first_rows = df[has_voucher & ~repeated].set_index(key)[SOURCE_ROW]
+    reasons = pd.Series(
+        [
+            f"{PAYMENT_VOUCHER_COLUMN} repetido en el informe; se conserva la fila {first_rows.get((file, voucher))}"
+            for file, voucher in zip(df[SOURCE_FILE], df[PAYMENT_VOUCHER_COLUMN])
+        ],
+        index=df.index,
+        dtype=object,
+    )
+    return audit.remove_rows(df, repeated, "DUP-201", reasons)
+
+
+def report_gross_totals(df: pd.DataFrame, audit: AuditLog) -> None:
+    """Informa el total de Impt Bruto de cada informe y de todos juntos. Regla TRA-201.
+
+    Se calcula después de dejar un registro por comprobante. Los valores que no son
+    número (ya reportados como Error al convertir) no se suman, y se avisa cuántos son.
+    """
+    is_number = df[PAYMENT_GROSS_COLUMN].map(lambda value: isinstance(value, (int, float)) and not is_empty(value))
+    for (name, day), rows in df.groupby([SOURCE_FILE, INPUT_DATE], sort=False):
+        numbers = is_number[rows.index]
+        total = rows.loc[numbers, PAYMENT_GROSS_COLUMN].sum()
+        audit.note(
+            f"{name} ({day.strftime(DATE_FORMAT_TEXT)}): {money(total)} en {_records(numbers.sum())}"
+        )
+        if not numbers.all():
+            skipped = (~numbers).sum()
+            verb = "no se sumó" if skipped == 1 else "no se sumaron"
+            audit.note(
+                f"{name}: {verb} {_records(skipped)} sin {PAYMENT_GROSS_COLUMN} numérico (ver Acciones)",
+                ok=False,
+            )
+    reports = df[SOURCE_FILE].nunique()
+    if reports == 0:
+        audit.note("No se cargaron informes de pago: no hay valores que sumar")
+        return
+    total = df.loc[is_number, PAYMENT_GROSS_COLUMN].sum()
+    label = "del informe" if reports == 1 else f"de los {reports} informes"
+    audit.note(f"Total {label}: {money(total)} en {_records(is_number.sum())}")
+
+
+def money(value: float) -> str:
+    """Valor en formato de moneda colombiano, para los mensajes: $ 1.234.567,89."""
+    text = f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    return f"$ {text}"
+
+
+def _records(count: int) -> str:
+    return "1 registro" if count == 1 else f"{count} registros"
 
 
 def execution_day(value: Any) -> date | None:

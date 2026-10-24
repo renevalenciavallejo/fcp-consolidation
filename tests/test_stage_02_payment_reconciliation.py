@@ -26,14 +26,18 @@ def stage_1_output(rows=distinct(ROW, ROW)):
 PAYMENT_DAY = date(2026, 9, 28)
 
 
-# Encabezados de la hoja Pagos del informe de Tesorería (las primeras columnas y «Nº Cuenta»,
-# que viene repetida en el informe real).
-PAYMENT_COLUMNS = ["F Ejec", "UN", "NEGOCIO", "Nº Cuenta", "Comprobante", "Nº Cuenta"]
+# Encabezados de la hoja Pagos del informe de Tesorería (algunas columnas, con «Nº Cuenta»
+# repetida como en el informe real).
+PAYMENT_COLUMNS = ["F Ejec", "UN", "NEGOCIO", "Nº Cuenta", "Comprobante", "Impt Neto Pago", "Impt Bruto", "Nº Cuenta"]
 
 
-def payment(day=datetime(2026, 9, 28, 2, 0), unit="AP656"):
+def payment(day=datetime(2026, 9, 28, 2, 0), unit="AP656", voucher="00153417", gross=1000, net=None):
     """Registro de la hoja Pagos: la F Ejec trae hora, como en el informe real."""
-    return [day, unit, "NEGOCIOS", "001", "00153417", "002"]
+    return [day, unit, "NEGOCIOS", "001", voucher, gross if net is None else net, gross, "002"]
+
+
+def steps_of(result):
+    return {step.title: step.details for step in result.audit.steps}
 
 
 def treasury_report(name="tesoreria_28.xlsx", payments=None):
@@ -100,7 +104,7 @@ def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_02_payment_reconciliation)]
     assert codes == [
         "EST-007", "EST-001", "EST-002", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",
-        "LIM-201", "VAL-201",
+        "LIM-201", "VAL-201", "TIP-003", "TIP-005", "DUP-201", "TRA-201",
     ]
 
 
@@ -255,3 +259,76 @@ def test_file_name_warning_does_not_stop_processing_and_is_logged():
 def test_treasury_reports_have_no_name_warning():
     result = run(stage_1_output())
     assert not any("Advertencia" in line for line in result.audit.step_lines())
+
+
+# --- Comprobantes repetidos y total de Impt Bruto --------------------------------------------
+
+
+def test_repeated_voucher_is_kept_once_per_report():
+    # El mismo pago partido en dos transferencias: mismo Comprobante e Impt Bruto, distinto neto.
+    payments = [
+        payment(voucher="00157395", gross=894518.06, net=100000),
+        payment(voucher="00157395", gross=894518.06, net=794518.06),
+        payment(voucher="00157396", gross=500),
+        payment(voucher="00157396", gross=500, unit="AP198"),   # Otra unidad: no cuenta
+    ]
+    result = run(stage_1_output(), treasury={PAYMENT_DAY: treasury_report(payments=payments)})
+    [removal] = result.audit.removals
+    assert (removal.source_file, removal.source_row, removal.rule) == ("tesoreria_28.xlsx", 3, "DUP-201")
+    assert removal.reason == "Comprobante repetido en el informe; se conserva la fila 2"
+    assert removal.row_data["Impt Neto Pago"] == 794518.06
+    assert steps_of(result)["Calculando el total de Impt Bruto"] == [
+        "✓ tesoreria_28.xlsx (28/09/2026): $ 895.018,06 en 2 registros",
+        "✓ Total del informe: $ 895.018,06 en 2 registros",
+    ]
+    # El reporte ETY (archivo de salida) no cambia.
+    assert result.summary.rows_output == 2
+
+
+def test_voucher_is_compared_as_code():
+    payments = [payment(voucher="00157395"), payment(voucher=" 00157395 ")]
+    result = run(stage_1_output(), treasury={PAYMENT_DAY: treasury_report(payments=payments)})
+    assert [r.source_row for r in result.audit.removals] == [3]
+
+
+def test_payments_without_voucher_are_not_duplicates():
+    payments = [payment(voucher=None, gross=10), payment(voucher=None, gross=20)]
+    result = run(stage_1_output(), treasury={PAYMENT_DAY: treasury_report(payments=payments)})
+    assert result.audit.removals == []
+    assert "✓ Total del informe: $ 30,00 en 2 registros" in steps_of(result)["Calculando el total de Impt Bruto"]
+
+
+def test_same_voucher_in_two_reports_is_kept_in_both():
+    rows = distinct(ROW, with_date(ROW, datetime(2026, 9, 29)))
+    treasury = {
+        PAYMENT_DAY: treasury_report(payments=[payment(voucher="001", gross=100)]),
+        date(2026, 9, 29): treasury_report(
+            "tesoreria_29.xlsx", [payment(datetime(2026, 9, 29), voucher="001", gross=250.5)]
+        ),
+    }
+    result = run(stage_1_output(rows), treasury=treasury)
+    assert result.audit.removals == []
+    assert steps_of(result)["Calculando el total de Impt Bruto"] == [
+        "✓ tesoreria_28.xlsx (28/09/2026): $ 100,00 en 1 registro",
+        "✓ tesoreria_29.xlsx (29/09/2026): $ 250,50 en 1 registro",
+        "✓ Total de los 2 informes: $ 350,50 en 2 registros",
+    ]
+
+
+def test_gross_amount_that_is_not_a_number_is_reported_and_not_added():
+    payments = [payment(voucher="001", gross="1.500,25"), payment(voucher="002", gross="sin valor")]
+    result = run(stage_1_output(), treasury={PAYMENT_DAY: treasury_report(payments=payments)})
+    assert [(f.source_row, f.rule, f.severity) for f in result.audit.findings] == [(3, "TIP-005", "Error")]
+    assert steps_of(result)["Calculando el total de Impt Bruto"] == [
+        "✓ tesoreria_28.xlsx (28/09/2026): $ 1.500,25 en 1 registro",
+        "✗ tesoreria_28.xlsx: no se sumó 1 registro sin Impt Bruto numérico (ver Acciones)",
+        "✓ Total del informe: $ 1.500,25 en 1 registro",
+    ]
+
+
+def test_without_payment_dates_there_is_nothing_to_add():
+    rows = distinct(with_date(ROW, None), with_date(ROW, None))
+    result = run(stage_1_output(rows), treasury={})
+    assert steps_of(result)["Calculando el total de Impt Bruto"] == [
+        "✓ No se cargaron informes de pago: no hay valores que sumar"
+    ]
