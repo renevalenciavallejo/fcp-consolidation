@@ -45,7 +45,13 @@ def payment(day=datetime(2026, 9, 28, 2, 0), unit="AP656", voucher="00153417", g
 
 
 def steps_of(result):
+    """Pasos del log de ejecución de un procesamiento o de un análisis al cargar."""
     return {step.title: step.details for step in result.audit.steps}
+
+
+# Pasos del log de las reglas VAL-202 y VAL-203.
+COMPARE = "Comparando el total de Impt Bruto con el de VR. BRUTO del reporte ETY"
+MISSING = "Buscando comprobantes del reporte ETY que no están en el informe de pago"
 
 
 def treasury_report(name="tesoreria_28.xlsx", payments=None):
@@ -112,7 +118,7 @@ def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_02_payment_reconciliation)]
     assert codes == [
         "EST-007", "EST-001", "EST-002", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",
-        "LIM-201", "VAL-201", "TIP-003", "TIP-005", "DUP-201", "TRA-201", "VAL-202",
+        "LIM-201", "VAL-201", "TIP-003", "TIP-005", "DUP-201", "TRA-201", "VAL-202", "VAL-203",
     ]
 
 
@@ -189,8 +195,10 @@ def test_only_business_unit_ap656_is_checked():
     assert steps["Verificando que la F Ejec corresponda a la fecha de cada informe"] == [
         "✓ tesoreria_28.xlsx: 1 registros del 28/09/2026"
     ]
-    # Filtrar el informe no cambia el reporte ETY ni deja acciones en el log.
-    assert result.summary.rows_output == 2 and result.audit.actions == []
+    # Filtrar el informe no cambia el reporte ETY ni deja acciones en el log (los hallazgos
+    # VAL-203 son de los comprobantes del ETY que no están en este informe de prueba).
+    assert result.summary.rows_output == 2
+    assert [a for a in result.audit.actions if a.item.rule != "VAL-203"] == []
 
 
 def test_business_unit_ignores_case_and_spaces():
@@ -326,7 +334,7 @@ def test_same_voucher_in_two_reports_is_kept_in_both():
 def test_gross_amount_that_is_not_a_number_is_reported_and_not_added():
     payments = [payment(voucher="001", gross="1.500,25"), payment(voucher="002", gross="sin valor")]
     result = run(stage_1_output(), treasury={PAYMENT_DAY: treasury_report(payments=payments)})
-    assert [(f.source_row, f.rule, f.severity) for f in result.audit.findings] == [(3, "TIP-005", "Error")]
+    assert [(f.source_row, f.severity) for f in result.audit.findings if f.rule == "TIP-005"] == [(3, "Error")]
     assert steps_of(result)["Calculando el total de Impt Bruto"] == [
         "✓ tesoreria_28.xlsx (28/09/2026): $ 1.500,25 en 1 registro",
         "✗ tesoreria_28.xlsx: no se sumó 1 registro sin Impt Bruto numérico (ver Acciones)",
@@ -365,6 +373,10 @@ def test_loaded_treasury_report_is_validated_and_analyzed():
         "El total de Impt Bruto no es igual al de VR. BRUTO del reporte ETY: diferencia de -$ 1.999.900,00",
         "Total de Impt Bruto del informe: $ 100,00 en 1 registro",
         "Total de VR. BRUTO del reporte ETY del 28/09/2026: $ 2.000.000,00",
+        # Los comprobantes del ETY (00000101 y 00000102) no están en el informe (001).
+        "Comprobantes del reporte ETY que no están en el informe (2):",
+        "  00000101: $ 1.000.000,00",
+        "  00000102: $ 1.000.000,00",
     ]
     assert not analysis.ok
     steps = {step.title: step.details for step in analysis.audit.steps}
@@ -380,8 +392,8 @@ def test_loaded_treasury_report_is_validated_and_analyzed():
     ]
     # El comprobante repetido aparece en la tabla de acciones, con los datos del registro.
     actions = analysis.audit.actions_df()
-    assert list(actions["Archivo"]) == ["tesoreria_28.xlsx"]
-    assert list(actions["Fila"]) == [3] and list(actions["Regla"]) == ["DUP-201"]
+    repeated = actions[actions["Regla"] == "DUP-201"]
+    assert list(repeated["Archivo"]) == ["tesoreria_28.xlsx"] and list(repeated["Fila"]) == [3]
 
 
 def test_summary_counts_gross_amounts_that_are_not_numbers():
@@ -430,7 +442,7 @@ def test_analysis_matches_processing():
 
 def test_equal_totals_are_shown_in_green():
     # 2 pagos del ETY del 28/09 por 1.000.000 cada uno; el informe, partido en dos comprobantes.
-    payments = [payment(voucher="001", gross=1500000), payment(voucher="002", gross=500000.004)]
+    payments = [payment(voucher="00000101", gross=1500000), payment(voucher="00000102", gross=500000.004)]
     analysis = analyze(treasury_report(payments=payments))
     assert analysis.ok
     assert analysis.summary == [
@@ -439,9 +451,13 @@ def test_equal_totals_are_shown_in_green():
         "Total de Impt Bruto del informe: $ 2.000.000,00 en 2 registros",
         "Total de VR. BRUTO del reporte ETY del 28/09/2026: $ 2.000.000,00",
         "Los totales son iguales",
+        "Todos los comprobantes del reporte ETY de esta fecha están en el informe",
     ]
-    assert analysis.audit.steps[-1].details == [
+    assert steps_of(analysis)[COMPARE] == [
         "✓ tesoreria_28.xlsx (28/09/2026): $ 2.000.000,00, igual al VR. BRUTO del reporte ETY"
+    ]
+    assert steps_of(analysis)[MISSING] == [
+        "✓ tesoreria_28.xlsx (28/09/2026): los 2 comprobantes del reporte ETY están en el informe"
     ]
 
 
@@ -450,7 +466,7 @@ def test_ety_total_only_counts_the_report_date():
     rows = distinct(
         with_date(ROW, datetime(2026, 9, 28, 15, 0)), with_date(ROW, datetime(2026, 9, 29)), with_date(ROW, None),
     )
-    analysis = analyze(treasury_report(payments=[payment(gross=1000000)]), ety=ety_data(rows))
+    analysis = analyze(treasury_report(payments=[payment(voucher="00000101", gross=1000000)]), ety=ety_data(rows))
     assert analysis.ok
 
 
@@ -461,9 +477,66 @@ def test_different_totals_are_logged_but_do_not_stop_processing():
         date(2026, 9, 29): treasury_report("tesoreria_29.xlsx", [payment(datetime(2026, 9, 29), gross=999000)]),
     }
     result = run(stage_1_output(rows), treasury=treasury)
-    assert steps_of(result)["Comparando el total de Impt Bruto con el de VR. BRUTO del reporte ETY"] == [
+    assert steps_of(result)[COMPARE] == [
         "✓ tesoreria_28.xlsx (28/09/2026): $ 1.000.000,00, igual al VR. BRUTO del reporte ETY",
         "✗ [VAL-202] tesoreria_29.xlsx (29/09/2026): Impt Bruto $ 999.000,00 y VR. BRUTO del reporte ETY "
         "$ 1.000.000,00; diferencia de -$ 1.000,00",
+    ]
+    assert result.summary.rows_output == 2
+
+
+# --- Comprobantes del reporte ETY que no están en el informe (VAL-203) ------------------------
+
+
+def test_missing_voucher_turns_the_notice_red_even_with_equal_totals():
+    # El informe tiene el mismo total, pero con otro comprobante en lugar de 00000102.
+    payments = [payment(voucher="00000101", gross=1000000), payment(voucher="00000999", gross=1000000)]
+    analysis = analyze(treasury_report(payments=payments))
+    assert not analysis.ok
+    assert analysis.summary == [
+        "1 comprobante del reporte ETY no está en el informe",
+        "Total de Impt Bruto del informe: $ 2.000.000,00 en 2 registros",
+        "Total de VR. BRUTO del reporte ETY del 28/09/2026: $ 2.000.000,00",
+        "Los totales son iguales",
+        "Comprobantes del reporte ETY que no están en el informe (1):",
+        "  00000102: $ 1.000.000,00",
+    ]
+    assert steps_of(analysis)[MISSING] == [
+        "✗ [VAL-203] tesoreria_28.xlsx (28/09/2026): 1 comprobante del reporte ETY no está en el informe"
+    ]
+    # El hallazgo es del registro del ETY y aparece en Acciones con su VR. BRUTO.
+    actions = analysis.audit.actions_df()
+    finding = actions[actions["Regla"] == "VAL-203"].iloc[0]
+    assert (finding["Archivo"], finding["Fila"], finding["VR. BRUTO"]) == ("ETY_sept_E01_procesado.xlsx", 3, 1000000)
+
+
+def test_voucher_of_the_ety_is_compared_as_code():
+    payments = [payment(voucher=" 00000101 ", gross=1000000), payment(voucher="00000102", gross=1000000)]
+    assert analyze(treasury_report(payments=payments)).ok
+
+
+def test_only_vouchers_of_the_report_date_are_searched():
+    # El pago del 29/09 del ETY no se busca en el informe del 28/09.
+    rows = distinct(ROW, with_date(ROW, datetime(2026, 9, 29)))
+    report = treasury_report(payments=[payment(voucher="00000101", gross=1000000)])
+    assert analyze(report, ety=ety_data(rows)).ok
+
+
+def test_long_list_of_missing_vouchers_is_shortened_in_the_notice():
+    rows = distinct(*[ROW] * 23)
+    analysis = analyze(treasury_report(payments=[payment(voucher="00000101", gross=1000000)]), ety=ety_data(rows))
+    vouchers = [line for line in analysis.summary if line.startswith("  ")]
+    assert len(vouchers) == 21 and vouchers[-1] == "  y 2 más (ver «Acciones realizadas»)"
+    assert "Comprobantes del reporte ETY que no están en el informe (22):" in analysis.summary
+    assert len([f for f in analysis.audit.findings if f.rule == "VAL-203"]) == 22
+
+
+def test_missing_vouchers_are_flagged_in_the_output_but_do_not_stop_processing():
+    payments = [payment(voucher="00000101", gross=1000000), payment(voucher="00000999", gross=1000000)]
+    result = run(stage_1_output(), treasury={PAYMENT_DAY: treasury_report(payments=payments)})
+    [finding] = [f for f in result.audit.findings if f.rule == "VAL-203"]
+    assert (finding.source_row, finding.column, finding.severity, finding.value) == (3, "Comprobante", "Error", "00000102")
+    assert steps_of(result)[MISSING] == [
+        "✗ [VAL-203] tesoreria_28.xlsx (28/09/2026): 1 comprobante del reporte ETY no está en el informe"
     ]
     assert result.summary.rows_output == 2

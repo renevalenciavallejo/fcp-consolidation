@@ -12,17 +12,19 @@ from typing import Any
 import pandas as pd
 
 from core.audit import AuditLog, is_empty
-from core.cleaning import comparable_text, convert_columns, parse_date, parse_number
+from core.cleaning import comparable_text, convert_columns, normalize_code, parse_date, parse_number
 from core.runner import StageError
-from core.settings import DATE_FORMAT_TEXT, INPUT_DATE, SOURCE_FILE, SOURCE_ROW
+from core.settings import DATE_FORMAT_TEXT, ERROR, INPUT_DATE, SOURCE_FILE, SOURCE_ROW
 from stages.stage_02_payment_reconciliation.config import (
     BUSINESS_UNIT,
     BUSINESS_UNIT_COLUMN,
     ETY_GROSS_COLUMN,
     ETY_PAYMENT_DATE_COLUMN,
+    ETY_VOUCHER_COLUMN,
     EXECUTION_DATE_COLUMN,
     INPUTS,
     MAX_ROWS_IN_MESSAGE,
+    MAX_VOUCHERS_IN_NOTICE,
     PAYMENT_GROSS_COLUMN,
     PAYMENT_VOUCHER_COLUMN,
 )
@@ -41,11 +43,15 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     loaded = reports[[SOURCE_FILE, INPUT_DATE]].drop_duplicates()
     for name, day in loaded.itertuples(index=False):
         compare_with_ety(name, day, payments, ety_totals, audit)
+    audit.step(MISSING_STEP)
+    for name, day in loaded.itertuples(index=False):
+        find_missing_vouchers(name, day, payments, inputs["ety_processed"], audit)
     return inputs["ety_processed"]
 
 
-# Paso del log de ejecución de la regla VAL-202.
+# Pasos del log de ejecución de las reglas VAL-202 y VAL-203.
 COMPARE_STEP = f"Comparando el total de {PAYMENT_GROSS_COLUMN} con el de {ETY_GROSS_COLUMN} del reporte ETY"
+MISSING_STEP = "Buscando comprobantes del reporte ETY que no están en el informe de pago"
 
 
 def analyze_payments(payments: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
@@ -84,6 +90,10 @@ def analyze_payment_report(
     audit.step(COMPARE_STEP)
     name = report[SOURCE_FILE].iloc[0] if len(report) else "Informe"
     report_total, ety_total, matches = compare_with_ety(name, day, payments, ety_gross_by_day(ety), audit)
+    audit.step(MISSING_STEP)
+    # Los hallazgos de VAL-203 son de registros del ETY: se guardan para la tabla de acciones.
+    audit.remember_source_rows(ety)
+    missing = find_missing_vouchers(name, day, payments, ety, audit)
     discarded = sum(1 for removal in audit.removals if removal.rule == "DUP-201")
     is_number = payments[PAYMENT_GROSS_COLUMN].map(_is_number).astype(bool)
     totals = [f"Total de {PAYMENT_GROSS_COLUMN} del informe: {money(report_total)} en {_records(is_number.sum())}"]
@@ -93,16 +103,72 @@ def analyze_payment_report(
         f"Total de {ETY_GROSS_COLUMN} del reporte ETY del {day.strftime(DATE_FORMAT_TEXT)}: {money(ety_total)}"
     )
     if not matches:
-        difference = (
+        headline = (
             f"El total de {PAYMENT_GROSS_COLUMN} no es igual al de {ETY_GROSS_COLUMN} del reporte ETY: "
             f"diferencia de {money(report_total - ety_total)}"
         )
-        return [difference, *totals], False
+        return [headline, *totals, *missing_voucher_lines(missing)], False
+    if not missing.empty:
+        headline = f"{_vouchers(len(missing))} del reporte ETY no {'está' if len(missing) == 1 else 'están'} en el informe"
+        return [headline, *totals, "Los totales son iguales", *missing_voucher_lines(missing)], False
     counts = [
         f"Registros con {BUSINESS_UNIT_COLUMN} {BUSINESS_UNIT}: {len(payments) + discarded} de {len(report)}",
         f"Registros descartados por {PAYMENT_VOUCHER_COLUMN} repetido: {discarded}",
     ]
-    return [*counts, *totals, "Los totales son iguales"], True
+    present = "Todos los comprobantes del reporte ETY de esta fecha están en el informe"
+    return [*counts, *totals, "Los totales son iguales", present], True
+
+
+def missing_voucher_lines(missing: pd.DataFrame) -> list[str]:
+    """Comprobantes faltantes para la notificación: número y VR. BRUTO, como sublista.
+
+    Las líneas que empiezan con dos espacios son elementos de la línea anterior. Si son
+    muchos, se listan los primeros y los demás se cuentan (todos están en Acciones).
+    """
+    if missing.empty:
+        return []
+    lines = [f"Comprobantes del reporte ETY que no están en el informe ({len(missing)}):"]
+    for voucher, value in zip(missing[ETY_VOUCHER_COLUMN], missing[ETY_GROSS_COLUMN]):
+        lines.append(f"  {normalize_code(voucher)}: {_amount_text(value)}")
+    hidden = len(missing) - MAX_VOUCHERS_IN_NOTICE
+    if hidden > 0:
+        lines = lines[:MAX_VOUCHERS_IN_NOTICE + 1]
+        lines.append(f"  y {hidden} más (ver «Acciones realizadas»)")
+    return lines
+
+
+def find_missing_vouchers(
+    name: str, day: date, payments: pd.DataFrame, ety: pd.DataFrame, audit: AuditLog
+) -> pd.DataFrame:
+    """Busca los comprobantes del ETY de una fecha que no están en el informe de esa fecha. Regla VAL-203.
+
+    Se compara contra los pagos ya depurados del informe (UN AP656, un registro por
+    comprobante), como códigos, para que «00157395» y « 00157395 » sean el mismo. Cada
+    comprobante faltante queda como Error en el registro del ETY (se resalta en el archivo
+    de salida y aparece en Acciones con su VR. BRUTO), sin detener el proceso: el usuario
+    revisa el pago con Tesorería o corrige el ETY. Los registros del ETY sin comprobante
+    no se buscan. Devuelve los registros del ETY que faltan.
+    """
+    in_report = payments.loc[
+        (payments[SOURCE_FILE] == name) & (payments[INPUT_DATE] == day), PAYMENT_VOUCHER_COLUMN
+    ].map(normalize_code)
+    on_day = ety[ety[ETY_PAYMENT_DATE_COLUMN].map(execution_day) == day]
+    vouchers = on_day[ETY_VOUCHER_COLUMN].map(normalize_code)
+    missing = on_day[vouchers.notna() & ~vouchers.isin(list(in_report.dropna()))]
+    when = day.strftime(DATE_FORMAT_TEXT)
+    if missing.empty:
+        audit.note(f"{name} ({when}): los {_vouchers(len(on_day))} del reporte ETY están en el informe")
+        return missing
+    verb = "no está" if len(missing) == 1 else "no están"
+    audit.note(f"[VAL-203] {name} ({when}): {_vouchers(len(missing))} del reporte ETY {verb} en el informe", ok=False)
+    for _, row in missing.iterrows():
+        audit.finding(
+            row[SOURCE_FILE], row[SOURCE_ROW], ETY_VOUCHER_COLUMN, ERROR, "VAL-203",
+            f"El comprobante no está en el informe de pago del {when} («{name}»)",
+            row[ETY_VOUCHER_COLUMN],
+            "Verifique el pago con Tesorería o corrija el reporte ETY",
+        )
+    return missing
 
 
 def ety_gross_by_day(ety: pd.DataFrame) -> dict[date, float]:
@@ -259,6 +325,19 @@ def money(value: float) -> str:
     sign = "-" if round(value, 2) < 0 else ""
     text = f"{abs(value):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
     return f"{sign}$ {text}"
+
+
+def _amount_text(value: Any) -> str:
+    """VR. BRUTO de un registro del ETY para los mensajes, aunque no sea un número."""
+    try:
+        amount = parse_number(value)
+    except ValueError:
+        return f"{value} (no es un número)"
+    return money(amount) if amount is not None else "sin valor"
+
+
+def _vouchers(count: int) -> str:
+    return "1 comprobante" if count == 1 else f"{count} comprobantes"
 
 
 def _is_number(value: Any) -> bool:

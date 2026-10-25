@@ -4,11 +4,13 @@ archivos, llama al ejecutor y muestra o entrega los resultados.
 Ejecutar con: uv run streamlit run app.py
 """
 
+from dataclasses import dataclass
+from io import BytesIO
+
 import pandas as pd
 import streamlit as st
 
 from core.audit import AuditLog
-
 from core.errors import UNEXPECTED_ERROR_MESSAGE, log_exception
 from core.runner import (
     StageError,
@@ -48,6 +50,18 @@ st.session_state.setdefault("result", None)
 st.session_state.setdefault("saved_paths", None)
 st.session_state.setdefault("result_stage", None)
 st.session_state.setdefault("uploader_version", 0)
+# Archivos de las entradas por fecha (por ejemplo, los informes de pago), por etapa, entrada y
+# fecha. Se guardan aquí y no en el cargador para conservarlos si se vuelve a cargar el ETY.
+st.session_state.setdefault("saved_reports", {})
+
+
+@dataclass
+class SavedFile:
+    """Archivo cargado en una entrada por fecha, guardado en memoria."""
+
+    name: str
+    data: bytes
+    file_id: str    # Identificador de la carga, para no volver a analizar el mismo archivo
 
 
 def reset() -> None:
@@ -56,6 +70,8 @@ def reset() -> None:
     st.session_state.saved_paths = None
     st.session_state.result_stage = None
     st.session_state.uploader_version += 1
+    st.session_state.saved_reports = {}
+    st.session_state.analysis_cache = {}
 
 
 # --- Barra lateral ---------------------------------------------------------
@@ -186,13 +202,18 @@ def show_analysis(uploaded, analysis) -> bool:
     # «$» se escapa: en Markdown, dos signos de pesos en un texto se toman como una fórmula.
     lines = [line.replace("$", "\\$") for line in analysis.summary]
     if analysis.ok:
-        details = "\n".join(f"- {line}" for line in lines)
+        details = "\n".join(bullet(line) for line in lines)
         st.success(f"«{uploaded.name}» pasó la validación.\n\n{details}", icon=":material/check_circle:")
     else:
         headline, *rest = lines
-        details = "\n".join(f"- {line}" for line in rest)
+        details = "\n".join(bullet(line) for line in rest)
         st.error(f"**{headline}**\n\n{details}", icon=":material/error:")
     return True
+
+
+def bullet(line: str) -> str:
+    """Elemento de lista en Markdown. Las líneas que empiezan con dos espacios van dentro de la anterior."""
+    return f"    - {line.strip()}" if line.startswith("  ") else f"- {line}"
 
 
 def show_load_log() -> None:
@@ -210,9 +231,16 @@ def date_uploaders(spec) -> tuple[dict, bool]:
     """Un cargador por cada fecha de la entrada de origen (por ejemplo, FECHA DE PAGO del ETY).
 
     Cada archivo se valida y analiza apenas se carga: debajo de su cargador aparece la
-    información calculada (o el error) y el detalle va al log de carga. Devuelve {fecha: archivo cargado} y si ya está todo lo necesario para
-    procesar: las fechas se conocen (el archivo de origen está cargado y es válido), ningún
-    archivo cargado tiene errores y, si la entrada es obligatoria, hay uno por cada fecha.
+    información calculada (o el error) y el detalle va al log de carga. Devuelve
+    {fecha: archivo} y si ya está todo lo necesario para procesar: las fechas se conocen
+    (el archivo de origen está cargado y es válido), ningún archivo tiene errores y, si la
+    entrada es obligatoria, hay uno por cada fecha.
+
+    Los archivos se guardan por fecha (saved_reports) y no en el cargador: si el usuario
+    corrige el reporte de origen y lo vuelve a cargar, las fechas que ya tenían archivo lo
+    conservan y se vuelven a analizar contra el reporte nuevo. Streamlit borra lo que tiene
+    un cargador cuando deja de mostrarse (por ejemplo, mientras se quita el reporte), así
+    que el cargador solo sirve para recibir el archivo.
     """
     source_key, column = spec.per_date
     source = next(s for s in input_specs(stage) if s.key == source_key)
@@ -235,17 +263,46 @@ def date_uploaders(spec) -> tuple[dict, bool]:
     loaded = {}
     all_valid = True
     for day in days:
+        saved = saved_file_input(spec, day)
+        if saved is not None:
+            loaded[day] = saved
+            # Un archivo con errores bloquea Procesar: el procesamiento se detendría por lo mismo.
+            all_valid = show_analysis(saved, load_analysis(spec, sources, day, saved)) and all_valid
+    return loaded, all_valid and (len(loaded) == len(days) or not spec.required)
+
+
+def saved_file_input(spec, day):
+    """Campo de una fecha: el archivo guardado con un botón para quitarlo o, si no hay, el cargador.
+
+    Al cargar un archivo se guarda en memoria y la página se vuelve a mostrar con él. Para
+    reemplazarlo se quita y se carga otro. Devuelve el archivo listo para leer, o None.
+    """
+    store_key = (stage_index, spec.key, day)
+    saved = st.session_state.saved_reports.get(store_key)
+    if saved is None:
         uploaded = st.file_uploader(
             date_label(spec, day),
             type=["xlsx"],
-            # La fecha va en la llave: si se cambia el reporte, se conservan los archivos de las fechas que siguen.
             key=f"upload_{stage_index}_{spec.key}_{day.isoformat()}_{st.session_state.uploader_version}",
         )
-        if uploaded is not None:
-            loaded[day] = uploaded
-            # Un archivo con errores bloquea Procesar: el procesamiento se detendría por lo mismo.
-            all_valid = show_analysis(uploaded, load_analysis(spec, sources, day, uploaded)) and all_valid
-    return loaded, all_valid and (len(loaded) == len(days) or not spec.required)
+        if uploaded is None:
+            return None
+        st.session_state.saved_reports[store_key] = SavedFile(
+            uploaded.name, uploaded.getvalue(), getattr(uploaded, "file_id", uploaded.name)
+        )
+        st.rerun()
+    st.markdown(date_label(spec, day))
+    row = st.container(horizontal=True, vertical_alignment="center")
+    size = f"{len(saved.data) / 1024:.1f}".replace(".", ",")
+    row.markdown(f":material/description: «{saved.name}» · {size} KB")
+    row.button(
+        "Quitar", icon=":material/close:", key=f"remove_{stage_index}_{spec.key}_{day.isoformat()}",
+        on_click=st.session_state.saved_reports.pop, args=(store_key, None),
+    )
+    file = BytesIO(saved.data)
+    file.name = saved.name
+    file.file_id = saved.file_id
+    return file
 
 
 files = {}

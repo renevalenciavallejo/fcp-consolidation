@@ -82,6 +82,14 @@ PAYMENT_GROSS_COLUMN = "Impt Bruto"
 ETY_PAYMENT_DATE_COLUMN = "FECHA DE PAGO"
 ETY_GROSS_COLUMN = "VR. BRUTO"
 
+# Columna del reporte ETY con el comprobante de cada pago. Cada comprobante del ETY de una
+# fecha debe estar en el informe de pago de esa fecha (columna Comprobante del informe).
+ETY_VOUCHER_COLUMN = "Comprobante"
+
+# Cuántos comprobantes faltantes se listan en la notificación debajo del campo del informe;
+# los demás se cuentan y quedan todos en la tabla de acciones.
+MAX_VOUCHERS_IN_NOTICE = 20
+
 # Cuántas filas se nombran como ejemplo en un mensaje de error; las demás solo se cuentan.
 MAX_ROWS_IN_MESSAGE = 10
 
@@ -101,6 +109,10 @@ RULES = {
         "Verificar que el total de Impt Bruto de cada informe de pago sea igual al total de VR. BRUTO "
         "del reporte ETY con la misma FECHA DE PAGO (si no, se avisa; no detiene el proceso)"
     ),
+    "VAL-203": (
+        "Identificar los comprobantes del reporte ETY que no están en el informe de pago de su "
+        "FECHA DE PAGO (se señalan como Error; no detiene el proceso)"
+    ),
 }
 
 # Todas las reglas que aplica la etapa, en el orden en que se aplican. Es la lista que el
@@ -110,5 +122,5 @@ APPLIED_RULES = [
     "EST-007", "EST-001", "EST-002", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",  # Estructura
     "LIM-201", "VAL-201",
     "TIP-003", "TIP-005",   # Comprobante como código e Impt Bruto como moneda
-    "DUP-201", "TRA-201", "VAL-202",
+    "DUP-201", "TRA-201", "VAL-202", "VAL-203",
 ]
