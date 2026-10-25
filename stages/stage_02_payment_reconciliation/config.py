@@ -77,6 +77,11 @@ PAYMENT_VOUCHER_COLUMN = "Comprobante"
 # Columna del informe de pago con el valor bruto del pago, que se totaliza.
 PAYMENT_GROSS_COLUMN = "Impt Bruto"
 
+# Columnas del reporte ETY con la fecha de pago y el valor bruto de cada pago. El total de
+# VR. BRUTO de cada fecha se compara con el total de Impt Bruto del informe de esa fecha.
+ETY_PAYMENT_DATE_COLUMN = "FECHA DE PAGO"
+ETY_GROSS_COLUMN = "VR. BRUTO"
+
 # Cuántas filas se nombran como ejemplo en un mensaje de error; las demás solo se cuentan.
 MAX_ROWS_IN_MESSAGE = 10
 
@@ -92,6 +97,10 @@ RULES = {
         "solo en memoria, el informe no se modifica)"
     ),
     "TRA-201": "Calcular el total de Impt Bruto de cada informe de pago y de todos los informes",
+    "VAL-202": (
+        "Verificar que el total de Impt Bruto de cada informe de pago sea igual al total de VR. BRUTO "
+        "del reporte ETY con la misma FECHA DE PAGO (si no, se avisa; no detiene el proceso)"
+    ),
 }
 
 # Todas las reglas que aplica la etapa, en el orden en que se aplican. Es la lista que el
@@ -101,5 +110,5 @@ APPLIED_RULES = [
     "EST-007", "EST-001", "EST-002", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",  # Estructura
     "LIM-201", "VAL-201",
     "TIP-003", "TIP-005",   # Comprobante como código e Impt Bruto como moneda
-    "DUP-201", "TRA-201",
+    "DUP-201", "TRA-201", "VAL-202",
 ]

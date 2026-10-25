@@ -12,12 +12,14 @@ from typing import Any
 import pandas as pd
 
 from core.audit import AuditLog, is_empty
-from core.cleaning import comparable_text, convert_columns, parse_date
+from core.cleaning import comparable_text, convert_columns, parse_date, parse_number
 from core.runner import StageError
 from core.settings import DATE_FORMAT_TEXT, INPUT_DATE, SOURCE_FILE, SOURCE_ROW
 from stages.stage_02_payment_reconciliation.config import (
     BUSINESS_UNIT,
     BUSINESS_UNIT_COLUMN,
+    ETY_GROSS_COLUMN,
+    ETY_PAYMENT_DATE_COLUMN,
     EXECUTION_DATE_COLUMN,
     INPUTS,
     MAX_ROWS_IN_MESSAGE,
@@ -32,8 +34,18 @@ PAYMENT_COLUMN_TYPES = INPUTS["treasury_reports"]["columns"]
 def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     # Los informes de pago solo se depuran en memoria: no hacen parte del archivo de salida
     # y el archivo original nunca se modifica.
-    analyze_payments(inputs["treasury_reports"], audit)
+    reports = inputs["treasury_reports"]
+    payments = analyze_payments(reports, audit)
+    audit.step(COMPARE_STEP)
+    ety_totals = ety_gross_by_day(inputs["ety_processed"])
+    loaded = reports[[SOURCE_FILE, INPUT_DATE]].drop_duplicates()
+    for name, day in loaded.itertuples(index=False):
+        compare_with_ety(name, day, payments, ety_totals, audit)
     return inputs["ety_processed"]
+
+
+# Paso del log de ejecución de la regla VAL-202.
+COMPARE_STEP = f"Comparando el total de {PAYMENT_GROSS_COLUMN} con el de {ETY_GROSS_COLUMN} del reporte ETY"
 
 
 def analyze_payments(payments: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
@@ -56,25 +68,85 @@ def analyze_payments(payments: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
     return payments
 
 
-def analyze_payment_report(report: pd.DataFrame, audit: AuditLog) -> list[str]:
+def analyze_payment_report(
+    report: pd.DataFrame, ety: pd.DataFrame, day: date, audit: AuditLog
+) -> tuple[list[str], bool]:
     """Analiza un informe de pago apenas se carga (INPUT_ANALYSIS en __init__.py).
 
-    Aplica las mismas reglas que Procesar y devuelve la información calculada que la
-    interfaz muestra debajo del campo del informe: cuántos registros son del FCP, cuántos
-    comprobantes repetidos se descartaron y el total de Impt Bruto.
+    Aplica las mismas reglas que Procesar, incluida la comparación con el reporte ETY
+    (VAL-202), y devuelve la información calculada que la interfaz muestra debajo del
+    campo del informe y si los totales coinciden (la sección se pinta verde o roja).
+
+    Si los totales no coinciden, lo importante es la diferencia: la primera línea la
+    anuncia (la interfaz la resalta) y solo siguen los totales que la explican.
     """
     payments = analyze_payments(report, audit)
+    audit.step(COMPARE_STEP)
+    name = report[SOURCE_FILE].iloc[0] if len(report) else "Informe"
+    report_total, ety_total, matches = compare_with_ety(name, day, payments, ety_gross_by_day(ety), audit)
     discarded = sum(1 for removal in audit.removals if removal.rule == "DUP-201")
     is_number = payments[PAYMENT_GROSS_COLUMN].map(_is_number).astype(bool)
-    total = payments.loc[is_number, PAYMENT_GROSS_COLUMN].sum()
-    lines = [
+    totals = [f"Total de {PAYMENT_GROSS_COLUMN} del informe: {money(report_total)} en {_records(is_number.sum())}"]
+    if not is_number.all():
+        totals.append(f"Sin {PAYMENT_GROSS_COLUMN} numérico (no se sumaron): {_records((~is_number).sum())}")
+    totals.append(
+        f"Total de {ETY_GROSS_COLUMN} del reporte ETY del {day.strftime(DATE_FORMAT_TEXT)}: {money(ety_total)}"
+    )
+    if not matches:
+        difference = (
+            f"El total de {PAYMENT_GROSS_COLUMN} no es igual al de {ETY_GROSS_COLUMN} del reporte ETY: "
+            f"diferencia de {money(report_total - ety_total)}"
+        )
+        return [difference, *totals], False
+    counts = [
         f"Registros con {BUSINESS_UNIT_COLUMN} {BUSINESS_UNIT}: {len(payments) + discarded} de {len(report)}",
         f"Registros descartados por {PAYMENT_VOUCHER_COLUMN} repetido: {discarded}",
-        f"Total de {PAYMENT_GROSS_COLUMN}: {money(total)} en {_records(is_number.sum())}",
     ]
-    if not is_number.all():
-        lines.append(f"Sin {PAYMENT_GROSS_COLUMN} numérico (no se sumaron): {_records((~is_number).sum())}")
-    return lines
+    return [*counts, *totals, "Los totales son iguales"], True
+
+
+def ety_gross_by_day(ety: pd.DataFrame) -> dict[date, float]:
+    """Total de VR. BRUTO del reporte ETY por cada FECHA DE PAGO (solo el día, sin la hora).
+
+    Las fechas vacías o no válidas y los valores que no son número no se suman: la
+    Etapa 1 ya los reportó y no corresponden a ningún informe de pago.
+    """
+    totals: dict[date, float] = {}
+    for when, value in zip(ety[ETY_PAYMENT_DATE_COLUMN], ety[ETY_GROSS_COLUMN]):
+        day = execution_day(when)
+        try:
+            amount = parse_number(value)
+        except ValueError:
+            continue
+        if day is not None and amount is not None:
+            totals[day] = totals.get(day, 0.0) + amount
+    return totals
+
+
+def compare_with_ety(
+    name: str, day: date, payments: pd.DataFrame, ety_totals: dict[date, float], audit: AuditLog
+) -> tuple[float, float, bool]:
+    """Compara el total de Impt Bruto de un informe con el de VR. BRUTO del ETY de su fecha. Regla VAL-202.
+
+    Se compara al centavo, para que las diferencias de redondeo de Excel no cuenten.
+    Si no son iguales se avisa en el log (✗), pero no se detiene: la diferencia puede
+    deberse a pagos que el usuario debe revisar. Devuelve los dos totales y si son iguales.
+    """
+    rows = payments[(payments[SOURCE_FILE] == name) & (payments[INPUT_DATE] == day)]
+    values = rows[PAYMENT_GROSS_COLUMN]
+    report_total = float(values[values.map(_is_number).astype(bool)].sum())
+    ety_total = ety_totals.get(day, 0.0)
+    matches = round(report_total - ety_total, 2) == 0
+    when = day.strftime(DATE_FORMAT_TEXT)
+    if matches:
+        audit.note(f"{name} ({when}): {money(report_total)}, igual al {ETY_GROSS_COLUMN} del reporte ETY")
+    else:
+        audit.note(
+            f"[VAL-202] {name} ({when}): {PAYMENT_GROSS_COLUMN} {money(report_total)} y {ETY_GROSS_COLUMN} "
+            f"del reporte ETY {money(ety_total)}; diferencia de {money(report_total - ety_total)}",
+            ok=False,
+        )
+    return report_total, ety_total, matches
 
 
 def filter_business_unit(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
@@ -183,9 +255,10 @@ def report_gross_totals(df: pd.DataFrame, audit: AuditLog) -> None:
 
 
 def money(value: float) -> str:
-    """Valor en formato de moneda colombiano, para los mensajes: $ 1.234.567,89."""
-    text = f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
-    return f"$ {text}"
+    """Valor en formato de moneda colombiano, para los mensajes: $ 1.234.567,89 o -$ 1.234,00."""
+    sign = "-" if round(value, 2) < 0 else ""
+    text = f"{abs(value):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    return f"{sign}$ {text}"
 
 
 def _is_number(value: Any) -> bool:

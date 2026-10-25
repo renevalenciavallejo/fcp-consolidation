@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 2: el total de Impt Bruto de cada informe de pago se compara con el total de VR. BRUTO del reporte ETY de la misma FECHA DE PAGO (regla VAL-202). Al cargar el informe, la sección debajo de su campo queda verde si son iguales y roja si no (con la diferencia resaltada y solo los dos totales); al procesar, la diferencia queda en el log. No detiene el procesamiento.
 - Etapa 2: cada informe de pago se valida y analiza apenas se carga (estructura, UN AP656, F Ejec, comprobantes repetidos y total de Impt Bruto). Debajo de su campo aparece la información calculada (registros AP656, descartados y total de Impt Bruto) o, si no pasa la validación, el error; en ese caso Procesar queda deshabilitado. Debajo de los campos de carga, las pestañas «Log de ejecución» y «Acciones realizadas» muestran todo lo que se hizo con los archivos al cargarlos (validación del ETY y análisis de cada informe); al procesar, se reemplazan por el log completo. Nueva opción de etapa `INPUT_ANALYSIS`.
 - Etapa 2: en memoria, se deja un solo registro por Comprobante en cada informe de pago (regla DUP-201; los descartados quedan en Acciones) y se informa el total de Impt Bruto de cada informe y de todos (regla TRA-201). Comprobante e Impt Bruto pasan a ser columnas obligatorias de la hoja Pagos.
 - Corrección: una etapa con entrada por fecha ya no falla cuando la columna de origen no tiene fechas.

@@ -14,7 +14,7 @@ from core.runner import (
     StageError,
     analyze_date_file,
     file_name_warnings,
-    input_dates,
+    load_date_sources,
     run_stage,
     save_result,
 )
@@ -100,28 +100,28 @@ def add_to_load_log(lines: list[str], actions: pd.DataFrame | None = None) -> No
         load_log["actions"].append(actions)
 
 
-def load_dates(source_files: list) -> dict | StageError:
-    """Fechas de las entradas por fecha (o el error de estructura del archivo de origen).
+def load_dates(source_files: list):
+    """Fechas de las entradas por fecha y datos del archivo de origen (o su error de estructura).
 
     Se guardan en session_state por archivo cargado: Streamlit vuelve a ejecutar la página
     con cada archivo que se carga y así el reporte no se lee una y otra vez. La lectura y
     la validación del archivo quedan en el log de carga.
     """
-    cache_key = (stage_index, tuple(getattr(f, "file_id", f.name) for f in source_files))
+    cache_key = (stage_index, file_ids(source_files))
     cache = st.session_state.setdefault("dates_cache", {})
     if cache_key not in cache:
         audit = AuditLog(stage_rules(stage))
         try:
-            cache[cache_key] = (input_dates(stage, files, audit), audit.step_lines(), audit.actions_df())
+            cache[cache_key] = (load_date_sources(stage, files, audit), audit.step_lines(), audit.actions_df())
         except StageError as error:
             cache[cache_key] = (error, error.steps, None)
         except Exception as error:
             # Nunca mostrar un traceback: el detalle queda en errores.log. No se guarda, para reintentar.
             log_exception(error)
             return StageError(UNEXPECTED_ERROR_MESSAGE, [])
-    dates, lines, actions = cache[cache_key]
+    sources, lines, actions = cache[cache_key]
     add_to_load_log(lines, actions)
-    return dates
+    return sources
 
 
 def show_step_log(placeholder, lines: list[str]) -> None:
@@ -140,17 +140,25 @@ def show_actions(actions) -> None:
     st.dataframe(actions.fillna("").astype(str), hide_index=True, width="stretch")
 
 
-def load_analysis(spec, day, uploaded):
+def file_ids(uploaded_files: list) -> tuple:
+    """Identifica los archivos cargados, para guardar en session_state lo que se calculó con ellos."""
+    return tuple(getattr(f, "file_id", f.name) for f in uploaded_files)
+
+
+def load_analysis(spec, sources, day, uploaded):
     """Análisis del archivo de una fecha: log e información calculada (o el error que lo detuvo).
 
     Se guarda en session_state por archivo cargado, como las fechas: Streamlit vuelve a
-    ejecutar la página con cada clic y así cada informe se analiza una sola vez.
+    ejecutar la página con cada clic y así cada informe se analiza una sola vez. El análisis
+    compara el archivo con el de origen (por ejemplo, el reporte ETY): si este cambia, se
+    analiza de nuevo.
     """
-    cache_key = (stage_index, spec.key, day, getattr(uploaded, "file_id", uploaded.name))
+    source_key = spec.per_date[0]
+    cache_key = (stage_index, spec.key, day, file_ids([uploaded]), file_ids(files[source_key]))
     cache = st.session_state.setdefault("analysis_cache", {})
     if cache_key not in cache:
         try:
-            cache[cache_key] = analyze_date_file(stage, spec.key, day, uploaded)
+            cache[cache_key] = analyze_date_file(stage, spec.key, day, uploaded, sources.data[source_key])
         except StageError as error:
             cache[cache_key] = error
         except Exception as error:
@@ -163,7 +171,11 @@ def load_analysis(spec, day, uploaded):
 def show_analysis(uploaded, analysis) -> bool:
     """Debajo del cargador: la información calculada o, si no pasó la validación, el error.
 
-    El detalle de lo que se hizo va al log de carga (pestañas de abajo). Devuelve si es válido.
+    La información va en verde si la etapa no encontró diferencias (por ejemplo, los totales
+    coinciden con el reporte ETY) y en rojo si las encontró; en ese caso la primera línea
+    describe la diferencia y se resalta. El detalle de lo que se hizo va
+    al log de carga (pestañas de abajo). Devuelve si el archivo es válido: las diferencias se
+    revisan, pero no impiden procesar.
     """
     if isinstance(analysis, StageError):
         add_to_load_log(analysis.steps)
@@ -171,8 +183,15 @@ def show_analysis(uploaded, analysis) -> bool:
         st.error(f"{analysis.message}\n\n{problems}\n\nCorrija el archivo y vuelva a cargarlo.")
         return False
     add_to_load_log(analysis.audit.step_lines(), analysis.audit.actions_df())
-    details = "\n".join(f"- {line}" for line in analysis.summary)
-    st.success(f"«{uploaded.name}» pasó la validación.\n\n{details}", icon=":material/check_circle:")
+    # «$» se escapa: en Markdown, dos signos de pesos en un texto se toman como una fórmula.
+    lines = [line.replace("$", "\\$") for line in analysis.summary]
+    if analysis.ok:
+        details = "\n".join(f"- {line}" for line in lines)
+        st.success(f"«{uploaded.name}» pasó la validación.\n\n{details}", icon=":material/check_circle:")
+    else:
+        headline, *rest = lines
+        details = "\n".join(f"- {line}" for line in rest)
+        st.error(f"**{headline}**\n\n{details}", icon=":material/error:")
     return True
 
 
@@ -201,14 +220,14 @@ def date_uploaders(spec) -> tuple[dict, bool]:
         st.markdown(f"**{spec.label}**")
         st.caption(f"Cargue primero «{source.label}»: aquí aparecerá un campo por cada fecha de {column}.")
         return {}, False
-    dates = load_dates(files[source_key])
-    if isinstance(dates, StageError):
+    sources = load_dates(files[source_key])
+    if isinstance(sources, StageError):
         # Sin título: el error es del archivo de origen y se ve justo debajo de su cargador.
-        problems = "\n".join(f"- {p}" for p in dates.problems)
-        st.error(f"{dates.message}\n\n{problems}\n\nCorrija el archivo y vuelva a cargarlo.")
+        problems = "\n".join(f"- {p}" for p in sources.problems)
+        st.error(f"{sources.message}\n\n{problems}\n\nCorrija el archivo y vuelva a cargarlo.")
         return {}, False
     st.markdown(f"**{spec.label}**")
-    days = dates.get(spec.key, [])
+    days = sources.dates.get(spec.key, [])
     if not days:
         st.info(f"La columna {column} no tiene fechas: no se necesita ningún archivo.")
         return {}, True
@@ -225,7 +244,7 @@ def date_uploaders(spec) -> tuple[dict, bool]:
         if uploaded is not None:
             loaded[day] = uploaded
             # Un archivo con errores bloquea Procesar: el procesamiento se detendría por lo mismo.
-            all_valid = show_analysis(uploaded, load_analysis(spec, day, uploaded)) and all_valid
+            all_valid = show_analysis(uploaded, load_analysis(spec, sources, day, uploaded)) and all_valid
     return loaded, all_valid and (len(loaded) == len(days) or not spec.required)
 
 

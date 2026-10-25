@@ -34,7 +34,7 @@ Documento, Nº Sec Doc, Más Info, Dpto, Cd Fnd, Subfideicomiso, Cuenta, Proy, P
 
 Columnas obligatorias, en cualquier posición: **F Ejec** (fecha de ejecución del pago, columna A), **UN** (unidad de negocio, B), **Comprobante** (P) e **Impt Bruto** (T). El informe trae muchas más columnas (Factura, Impt Neto Pago, …), que se aceptan sin validarlas; algunas vienen repetidas, como «Nº Cuenta», y eso tampoco es un error. Un encabezado repetido sí es error si es una de las cuatro obligatorias.
 
-En la interfaz, al cargar el reporte ETY se valida su estructura (Paso 1) y, si es correcta, aparece un campo de carga por cada fecha de pago, con la fecha en la etiqueta («Informe de pago del 22 de septiembre de 2026»). Si el reporte tiene errores de estructura, se muestran de inmediato y no aparecen los campos. Cada informe se valida y analiza apenas se carga, con las mismas reglas de los pasos 2 a 5 (estructura, UN AP656, F Ejec, comprobantes repetidos y total de Impt Bruto), Debajo de su campo aparece la información calculada (registros con UN AP656 de los leídos, registros descartados por Comprobante repetido, total de Impt Bruto y, si los hay, registros sin Impt Bruto numérico) o, si no pasa la validación, el mensaje de error. Debajo de los campos de carga, las pestañas «Log de ejecución» y «Acciones realizadas» muestran todo lo que se hizo con los archivos al cargarlos: la validación del reporte ETY y el análisis de cada informe. Al procesar, esas pestañas se reemplazan por el log completo del procesamiento. El botón Procesar se habilita cuando todas las fechas tienen su informe y ninguno tiene errores; al procesar se vuelven a aplicar todas las reglas y el resultado queda en el log.
+En la interfaz, al cargar el reporte ETY se valida su estructura (Paso 1) y, si es correcta, aparece un campo de carga por cada fecha de pago, con la fecha en la etiqueta («Informe de pago del 22 de septiembre de 2026»). Si el reporte tiene errores de estructura, se muestran de inmediato y no aparecen los campos. Cada informe se valida y analiza apenas se carga, con las mismas reglas de los pasos 2 a 5 (estructura, UN AP656, F Ejec, comprobantes repetidos y total de Impt Bruto), Debajo de su campo aparece la información calculada. Si los totales son iguales (paso 6), la sección es **verde** y muestra los registros con UN AP656 de los leídos, los registros descartados por Comprobante repetido, el total de Impt Bruto del informe (y, si los hay, los registros sin Impt Bruto numérico), el total de VR. BRUTO del reporte ETY de esa fecha y que los totales son iguales. Si no son iguales, la sección es **roja** y se centra en la diferencia: la anuncia resaltada («El total de Impt Bruto no es igual al de VR. BRUTO del reporte ETY: diferencia de -$ 5.781.466.312,00») y debajo muestra solo los dos totales; si el informe no pasa la validación, muestra el mensaje de error en rojo y Procesar queda deshabilitado. Una diferencia de totales no deshabilita Procesar. Debajo de los campos de carga, las pestañas «Log de ejecución» y «Acciones realizadas» muestran todo lo que se hizo con los archivos al cargarlos: la validación del reporte ETY y el análisis de cada informe. Al procesar, esas pestañas se reemplazan por el log completo del procesamiento. El botón Procesar se habilita cuando todas las fechas tienen su informe y ninguno tiene errores; al procesar se vuelven a aplicar todas las reglas y el resultado queda en el log.
 
 ## Reglas
 
@@ -91,6 +91,14 @@ Se hace **en memoria**, sobre los registros con UN AP656: los informes de pago n
 
 Ejemplo con los informes reales del 28, 29 y 30 de septiembre de 2026: se descartan la fila 421 del 28 (comprobante 00157395, se conserva la 420) y la fila 227 del 29 (00157353, se conserva la 225). Totales: $ 1.215.024.240,87, $ 6.370.226.836,84 y $ 19.781.705.464,59; en total $ 27.366.956.542,30 en 375 registros.
 
+### Paso 6 – Total de Impt Bruto frente al reporte ETY (implementado)
+
+| Código | Validación |
+| --- | --- |
+| VAL-202 | El total de **Impt Bruto** de cada informe (después de los pasos 3 a 5) es igual al total de **VR. BRUTO** (columna E) de los registros del reporte ETY con la misma **FECHA DE PAGO** (columna D, solo el día). Se compara al centavo. En el ETY no se suman las fechas vacías o no válidas ni los valores que no son número |
+
+Si los totales no son iguales, **no se detiene**: queda una línea ✗ en el log de ejecución con los dos totales y la diferencia (Impt Bruto menos VR. BRUTO), y al cargar el informe la sección debajo de su campo se pone roja. Si son iguales, la sección queda verde.
+
 ### Pasos siguientes (por especificar)
 
 - Reglas de conciliación de pagos.
@@ -104,4 +112,5 @@ Por ahora, los mismos registros del reporte ETY, con la misma apariencia. El nom
 ## Tareas manuales
 
 - Si el procesamiento se detiene por VAL-201, cargar cada informe en el campo de su fecha (o pedir a Tesorería el informe correcto) y procesar de nuevo.
+- Si un informe queda en rojo por VAL-202, revisar la diferencia entre su total de Impt Bruto y el VR. BRUTO del reporte ETY de esa fecha.
 - Las demás, por definir.

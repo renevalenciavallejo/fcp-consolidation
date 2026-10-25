@@ -6,7 +6,14 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-from core.runner import StageError, analyze_date_file, file_name_warnings, input_dates, run_stage
+from core.runner import (
+    StageError,
+    analyze_date_file,
+    file_name_warnings,
+    input_dates,
+    load_date_sources,
+    run_stage,
+)
 from core.audit import AuditLog
 from core.stage import input_specs, stage_rules
 from core.stage import applied_rules
@@ -105,7 +112,7 @@ def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_02_payment_reconciliation)]
     assert codes == [
         "EST-007", "EST-001", "EST-002", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",
-        "LIM-201", "VAL-201", "TIP-003", "TIP-005", "DUP-201", "TRA-201",
+        "LIM-201", "VAL-201", "TIP-003", "TIP-005", "DUP-201", "TRA-201", "VAL-202",
     ]
 
 
@@ -338,19 +345,28 @@ def test_without_payment_dates_there_is_nothing_to_add():
 # --- Análisis de cada informe apenas se carga -------------------------------------------------
 
 
-def analyze(file, day=PAYMENT_DAY):
-    return analyze_date_file(stage_02_payment_reconciliation, "treasury_reports", day, file)
+def ety_data(rows=distinct(ROW, ROW)):
+    """Reporte ETY ya leído y validado, como lo tiene la interfaz al cargar los informes."""
+    sources = load_date_sources(stage_02_payment_reconciliation, {"ety_processed": [stage_1_output(rows)]})
+    return sources.data["ety_processed"]
+
+
+def analyze(file, day=PAYMENT_DAY, ety=None):
+    ety = ety_data() if ety is None else ety
+    return analyze_date_file(stage_02_payment_reconciliation, "treasury_reports", day, file, ety)
 
 
 def test_loaded_treasury_report_is_validated_and_analyzed():
     payments = [payment(voucher="001", gross=100), payment(voucher="001", gross=100), payment(unit="AP198")]
     analysis = analyze(treasury_report(payments=payments))
-    # Información calculada que se muestra debajo del campo del informe.
+    # Si los totales no coinciden, el mensaje empieza por la diferencia y solo muestra los totales.
+    # El ETY tiene 2 pagos del 28/09 con VR. BRUTO de 1.000.000 cada uno.
     assert analysis.summary == [
-        "Registros con UN AP656: 2 de 3",
-        "Registros descartados por Comprobante repetido: 1",
-        "Total de Impt Bruto: $ 100,00 en 1 registro",
+        "El total de Impt Bruto no es igual al de VR. BRUTO del reporte ETY: diferencia de -$ 1.999.900,00",
+        "Total de Impt Bruto del informe: $ 100,00 en 1 registro",
+        "Total de VR. BRUTO del reporte ETY del 28/09/2026: $ 2.000.000,00",
     ]
+    assert not analysis.ok
     steps = {step.title: step.details for step in analysis.audit.steps}
     assert steps["Abriendo «tesoreria_28.xlsx» (Informe de pago del 28 de septiembre de 2026)"] == [
         "✓ Archivo .xlsx válido"
@@ -371,15 +387,15 @@ def test_loaded_treasury_report_is_validated_and_analyzed():
 def test_summary_counts_gross_amounts_that_are_not_numbers():
     payments = [payment(voucher="001", gross="1.500,25"), payment(voucher="002", gross="sin valor")]
     analysis = analyze(treasury_report(payments=payments))
-    assert analysis.summary[2:] == [
-        "Total de Impt Bruto: $ 1.500,25 en 1 registro",
+    assert analysis.summary[1:3] == [
+        "Total de Impt Bruto del informe: $ 1.500,25 en 1 registro",
         "Sin Impt Bruto numérico (no se sumaron): 1 registro",
     ]
 
 
 def test_ety_validation_at_load_can_be_logged():
     audit = AuditLog(stage_rules(stage_02_payment_reconciliation))
-    input_dates(stage_02_payment_reconciliation, {"ety_processed": [stage_1_output()]}, audit)
+    load_date_sources(stage_02_payment_reconciliation, {"ety_processed": [stage_1_output()]}, audit)
     lines = audit.step_lines()
     assert "▸ Abriendo «ETY_sept_E01_procesado.xlsx»" in lines
     assert any("25 columnas en el orden esperado" in line for line in lines)
@@ -407,3 +423,47 @@ def test_analysis_matches_processing():
     processed = steps_of(result)
     for step in audit.steps:
         assert processed[step.title] == step.details
+
+
+# --- Total de Impt Bruto frente a VR. BRUTO del reporte ETY (VAL-202) ---------------------------
+
+
+def test_equal_totals_are_shown_in_green():
+    # 2 pagos del ETY del 28/09 por 1.000.000 cada uno; el informe, partido en dos comprobantes.
+    payments = [payment(voucher="001", gross=1500000), payment(voucher="002", gross=500000.004)]
+    analysis = analyze(treasury_report(payments=payments))
+    assert analysis.ok
+    assert analysis.summary == [
+        "Registros con UN AP656: 2 de 2",
+        "Registros descartados por Comprobante repetido: 0",
+        "Total de Impt Bruto del informe: $ 2.000.000,00 en 2 registros",
+        "Total de VR. BRUTO del reporte ETY del 28/09/2026: $ 2.000.000,00",
+        "Los totales son iguales",
+    ]
+    assert analysis.audit.steps[-1].details == [
+        "✓ tesoreria_28.xlsx (28/09/2026): $ 2.000.000,00, igual al VR. BRUTO del reporte ETY"
+    ]
+
+
+def test_ety_total_only_counts_the_report_date():
+    # La hora no importa; los pagos de otra fecha o sin fecha no se suman.
+    rows = distinct(
+        with_date(ROW, datetime(2026, 9, 28, 15, 0)), with_date(ROW, datetime(2026, 9, 29)), with_date(ROW, None),
+    )
+    analysis = analyze(treasury_report(payments=[payment(gross=1000000)]), ety=ety_data(rows))
+    assert analysis.ok
+
+
+def test_different_totals_are_logged_but_do_not_stop_processing():
+    rows = distinct(ROW, with_date(ROW, datetime(2026, 9, 29)))
+    treasury = {
+        PAYMENT_DAY: treasury_report(payments=[payment(gross=1000000)]),
+        date(2026, 9, 29): treasury_report("tesoreria_29.xlsx", [payment(datetime(2026, 9, 29), gross=999000)]),
+    }
+    result = run(stage_1_output(rows), treasury=treasury)
+    assert steps_of(result)["Comparando el total de Impt Bruto con el de VR. BRUTO del reporte ETY"] == [
+        "✓ tesoreria_28.xlsx (28/09/2026): $ 1.000.000,00, igual al VR. BRUTO del reporte ETY",
+        "✗ [VAL-202] tesoreria_29.xlsx (29/09/2026): Impt Bruto $ 999.000,00 y VR. BRUTO del reporte ETY "
+        "$ 1.000.000,00; diferencia de -$ 1.000,00",
+    ]
+    assert result.summary.rows_output == 2
