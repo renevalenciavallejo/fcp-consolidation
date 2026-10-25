@@ -51,6 +51,14 @@ class StageResult:
     log_bytes: bytes
 
 
+@dataclass
+class DateFileAnalysis:
+    """Resultado de analizar el archivo de una fecha apenas se carga (analyze_date_file)."""
+
+    audit: AuditLog        # Log de ejecución y acciones del análisis
+    summary: list[str]     # Información calculada por la etapa, para mostrar debajo del cargador
+
+
 # Sufijo que la herramienta agrega a los archivos procesados (por ejemplo "_E01_procesado"),
 # con el número que se agrega cuando ya existe una copia: "_1" en output/ o " (1)" del navegador.
 PROCESSED_SUFFIX = r"_E\d{2}_procesado(_\d+| \(\d+\))?$"
@@ -259,15 +267,19 @@ def read_and_report(file: Any, spec, audit: AuditLog, day: date | None = None) -
     return result
 
 
-def input_dates(stage: ModuleType, files: StageFiles) -> dict[str, list[date]]:
+def input_dates(
+    stage: ModuleType, files: StageFiles, audit: AuditLog | None = None
+) -> dict[str, list[date]]:
     """Fechas de cada entrada por fecha, para que la interfaz pida un archivo por fecha.
 
     Lee y valida el archivo del que salen las fechas (por ejemplo, el reporte ETY).
     Lanza StageError si su estructura no es la esperada. Una entrada cuyo archivo de
-    origen todavía no se ha cargado no aparece en el resultado.
+    origen todavía no se ha cargado no aparece en el resultado. Si se pasa `audit`, la
+    lectura y la validación quedan en ese log (la interfaz lo muestra al cargar).
     """
     specs = input_specs(stage)
-    audit = AuditLog(stage_rules(stage))
+    if audit is None:
+        audit = AuditLog(stage_rules(stage))
     dates = {}
     for spec in specs:
         if not spec.per_date:
@@ -280,7 +292,37 @@ def input_dates(stage: ModuleType, files: StageFiles) -> dict[str, list[date]]:
         results = [read_and_report(f, source, audit) for f in source_files]
         _stop_on_structure_problems({source_key: results}, {source_key: source_files}, audit)
         dates[spec.key] = dates_in(combine(results, source), column)
+    audit.finish_step()
     return dates
+
+
+def analyze_date_file(
+    stage: ModuleType, key: str, day: date, file: Any, progress: ProgressCallback | None = None
+) -> DateFileAnalysis:
+    """Valida y analiza el archivo de una fecha apenas se carga, sin esperar a Procesar.
+
+    Abre el archivo, valida su estructura y, si la etapa lo declara en INPUT_ANALYSIS,
+    le aplica sus reglas (por ejemplo, las de un informe de pago). Devuelve el log de
+    ese análisis y la información calculada por la etapa. Lanza StageError si la
+    estructura no es la esperada o si una regla detiene el proceso. No genera archivos:
+    Procesar vuelve a aplicar todo y deja el resultado en el log.
+    """
+    spec = _spec(input_specs(stage), key)
+    audit = AuditLog(stage_rules(stage), on_line=progress)
+    # La etapa recibe este archivo junto con otros (el de origen de las fechas), así que
+    # las acciones llevan el nombre del archivo, como al procesar.
+    audit.multiple_files = True
+    result = read_and_report(file, spec, audit, day)
+    _stop_on_structure_problems({key: [result]}, {key: [file]}, audit)
+    if result.data is not None:
+        result.data[INPUT_DATE] = day
+    data = combine([result], spec)
+    audit.remember_source_rows(data)
+    remove_title_rows({key: [result]}, audit)
+    analyze = getattr(stage, "INPUT_ANALYSIS", {}).get(key)
+    summary = analyze(data, audit) if analyze else []
+    audit.finish_step()
+    return DateFileAnalysis(audit, summary)
 
 
 def dates_in(data: pd.DataFrame, column: str) -> list[date]:

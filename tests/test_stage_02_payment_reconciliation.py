@@ -6,8 +6,9 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-from core.runner import StageError, file_name_warnings, input_dates, run_stage
-from core.stage import input_specs
+from core.runner import StageError, analyze_date_file, file_name_warnings, input_dates, run_stage
+from core.audit import AuditLog
+from core.stage import input_specs, stage_rules
 from core.stage import applied_rules
 from stages import STAGES, stage_01_ety_cleaning, stage_02_payment_reconciliation
 from tests.helpers import make_xlsx
@@ -332,3 +333,77 @@ def test_without_payment_dates_there_is_nothing_to_add():
     assert steps_of(result)["Calculando el total de Impt Bruto"] == [
         "✓ No se cargaron informes de pago: no hay valores que sumar"
     ]
+
+
+# --- Análisis de cada informe apenas se carga -------------------------------------------------
+
+
+def analyze(file, day=PAYMENT_DAY):
+    return analyze_date_file(stage_02_payment_reconciliation, "treasury_reports", day, file)
+
+
+def test_loaded_treasury_report_is_validated_and_analyzed():
+    payments = [payment(voucher="001", gross=100), payment(voucher="001", gross=100), payment(unit="AP198")]
+    analysis = analyze(treasury_report(payments=payments))
+    # Información calculada que se muestra debajo del campo del informe.
+    assert analysis.summary == [
+        "Registros con UN AP656: 2 de 3",
+        "Registros descartados por Comprobante repetido: 1",
+        "Total de Impt Bruto: $ 100,00 en 1 registro",
+    ]
+    steps = {step.title: step.details for step in analysis.audit.steps}
+    assert steps["Abriendo «tesoreria_28.xlsx» (Informe de pago del 28 de septiembre de 2026)"] == [
+        "✓ Archivo .xlsx válido"
+    ]
+    assert steps["Tomando de los informes de pago los registros con UN AP656"] == [
+        "✓ tesoreria_28.xlsx: 2 de 3 registros con UN AP656"
+    ]
+    assert steps["Calculando el total de Impt Bruto"] == [
+        "✓ tesoreria_28.xlsx (28/09/2026): $ 100,00 en 1 registro",
+        "✓ Total del informe: $ 100,00 en 1 registro",
+    ]
+    # El comprobante repetido aparece en la tabla de acciones, con los datos del registro.
+    actions = analysis.audit.actions_df()
+    assert list(actions["Archivo"]) == ["tesoreria_28.xlsx"]
+    assert list(actions["Fila"]) == [3] and list(actions["Regla"]) == ["DUP-201"]
+
+
+def test_summary_counts_gross_amounts_that_are_not_numbers():
+    payments = [payment(voucher="001", gross="1.500,25"), payment(voucher="002", gross="sin valor")]
+    analysis = analyze(treasury_report(payments=payments))
+    assert analysis.summary[2:] == [
+        "Total de Impt Bruto: $ 1.500,25 en 1 registro",
+        "Sin Impt Bruto numérico (no se sumaron): 1 registro",
+    ]
+
+
+def test_ety_validation_at_load_can_be_logged():
+    audit = AuditLog(stage_rules(stage_02_payment_reconciliation))
+    input_dates(stage_02_payment_reconciliation, {"ety_processed": [stage_1_output()]}, audit)
+    lines = audit.step_lines()
+    assert "▸ Abriendo «ETY_sept_E01_procesado.xlsx»" in lines
+    assert any("25 columnas en el orden esperado" in line for line in lines)
+
+
+def test_loaded_treasury_report_with_another_date_is_rejected():
+    report = treasury_report(payments=[payment(datetime(2026, 9, 29))])
+    with pytest.raises(StageError) as error:
+        analyze(report)
+    assert error.value.problems[0].startswith("[VAL-201] «tesoreria_28.xlsx» se cargó como informe del 28/09/2026")
+    assert "▸ Verificando que la F Ejec corresponda a la fecha de cada informe" in error.value.steps
+
+
+def test_loaded_treasury_report_with_wrong_structure_is_rejected():
+    with pytest.raises(StageError) as error:
+        analyze(make_xlsx([["F Ejec", "UN"]], name="t.xlsx"))
+    assert error.value.message == "La estructura del archivo no es la esperada."
+    assert any("EST-002" in p for p in error.value.problems)
+
+
+def test_analysis_matches_processing():
+    # El análisis al cargar aplica las mismas reglas que Procesar.
+    result = run(stage_1_output())
+    audit = analyze(treasury_report()).audit
+    processed = steps_of(result)
+    for step in audit.steps:
+        assert processed[step.title] == step.details

@@ -4,12 +4,22 @@ archivos, llama al ejecutor y muestra o entrega los resultados.
 Ejecutar con: uv run streamlit run app.py
 """
 
+import pandas as pd
 import streamlit as st
 
+from core.audit import AuditLog
+
 from core.errors import UNEXPECTED_ERROR_MESSAGE, log_exception
-from core.runner import StageError, file_name_warnings, input_dates, run_stage, save_result
+from core.runner import (
+    StageError,
+    analyze_date_file,
+    file_name_warnings,
+    input_dates,
+    run_stage,
+    save_result,
+)
 from core.settings import APP_NAME, APP_VERSION, DOWNLOAD_BUTTON_COLOR, DOWNLOAD_BUTTON_HOVER_COLOR
-from core.stage import applied_rules, date_label, input_specs
+from core.stage import applied_rules, date_label, input_specs, stage_rules
 from stages import STAGES
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -78,17 +88,69 @@ with st.expander("Reglas que aplica esta etapa"):
         for number, (code, description) in enumerate(applied_rules(stage), start=1)
     ))
 
+# Log de lo que se hace con los archivos al cargarlos (antes de Procesar): líneas del log de
+# ejecución y tablas de acciones, en el orden de los campos de carga. Se arma de nuevo en cada
+# ejecución de la página con los análisis guardados, y se muestra abajo, en pestañas.
+load_log = {"lines": [], "actions": []}
+
+
+def add_to_load_log(lines: list[str], actions: pd.DataFrame | None = None) -> None:
+    load_log["lines"].extend(lines)
+    if actions is not None and not actions.empty:
+        load_log["actions"].append(actions)
+
+
 def load_dates(source_files: list) -> dict | StageError:
     """Fechas de las entradas por fecha (o el error de estructura del archivo de origen).
 
     Se guardan en session_state por archivo cargado: Streamlit vuelve a ejecutar la página
-    con cada archivo que se carga y así el reporte no se lee una y otra vez.
+    con cada archivo que se carga y así el reporte no se lee una y otra vez. La lectura y
+    la validación del archivo quedan en el log de carga.
     """
     cache_key = (stage_index, tuple(getattr(f, "file_id", f.name) for f in source_files))
     cache = st.session_state.setdefault("dates_cache", {})
     if cache_key not in cache:
+        audit = AuditLog(stage_rules(stage))
         try:
-            cache[cache_key] = input_dates(stage, files)
+            cache[cache_key] = (input_dates(stage, files, audit), audit.step_lines(), audit.actions_df())
+        except StageError as error:
+            cache[cache_key] = (error, error.steps, None)
+        except Exception as error:
+            # Nunca mostrar un traceback: el detalle queda en errores.log. No se guarda, para reintentar.
+            log_exception(error)
+            return StageError(UNEXPECTED_ERROR_MESSAGE, [])
+    dates, lines, actions = cache[cache_key]
+    add_to_load_log(lines, actions)
+    return dates
+
+
+def show_step_log(placeholder, lines: list[str]) -> None:
+    """Muestra el log de ejecución como un bloque de texto, una línea por paso y resultado."""
+    placeholder.code("\n".join(lines), language=None)
+
+
+def show_actions(actions) -> None:
+    """Tabla con todo lo que se hizo, en el orden en que ocurrió."""
+    if actions.empty:
+        st.write("No se hizo ningún cambio, eliminación ni hallazgo.")
+        return
+    count = "1 acción" if len(actions) == 1 else f"{len(actions)} acciones"
+    st.caption(f"{count}, en el orden en que se hicieron.")
+    # Las celdas vacías se muestran en blanco, no como "None".
+    st.dataframe(actions.fillna("").astype(str), hide_index=True, width="stretch")
+
+
+def load_analysis(spec, day, uploaded):
+    """Análisis del archivo de una fecha: log e información calculada (o el error que lo detuvo).
+
+    Se guarda en session_state por archivo cargado, como las fechas: Streamlit vuelve a
+    ejecutar la página con cada clic y así cada informe se analiza una sola vez.
+    """
+    cache_key = (stage_index, spec.key, day, getattr(uploaded, "file_id", uploaded.name))
+    cache = st.session_state.setdefault("analysis_cache", {})
+    if cache_key not in cache:
+        try:
+            cache[cache_key] = analyze_date_file(stage, spec.key, day, uploaded)
         except StageError as error:
             cache[cache_key] = error
         except Exception as error:
@@ -98,12 +160,40 @@ def load_dates(source_files: list) -> dict | StageError:
     return cache[cache_key]
 
 
+def show_analysis(uploaded, analysis) -> bool:
+    """Debajo del cargador: la información calculada o, si no pasó la validación, el error.
+
+    El detalle de lo que se hizo va al log de carga (pestañas de abajo). Devuelve si es válido.
+    """
+    if isinstance(analysis, StageError):
+        add_to_load_log(analysis.steps)
+        problems = "\n".join(f"- {p}" for p in analysis.problems)
+        st.error(f"{analysis.message}\n\n{problems}\n\nCorrija el archivo y vuelva a cargarlo.")
+        return False
+    add_to_load_log(analysis.audit.step_lines(), analysis.audit.actions_df())
+    details = "\n".join(f"- {line}" for line in analysis.summary)
+    st.success(f"«{uploaded.name}» pasó la validación.\n\n{details}", icon=":material/check_circle:")
+    return True
+
+
+def show_load_log() -> None:
+    """Pestañas con lo que se hizo al cargar los archivos, igual que los resultados de Procesar."""
+    st.caption("Lo que se hizo al cargar los archivos. Al procesar, se reemplaza por el log completo.")
+    tab_log, tab_actions = st.tabs(["Log de ejecución", "Acciones realizadas"])
+    with tab_log:
+        show_step_log(st.empty(), load_log["lines"])
+    with tab_actions:
+        tables = load_log["actions"]
+        show_actions(pd.concat(tables, ignore_index=True) if tables else pd.DataFrame())
+
+
 def date_uploaders(spec) -> tuple[dict, bool]:
     """Un cargador por cada fecha de la entrada de origen (por ejemplo, FECHA DE PAGO del ETY).
 
-    Devuelve {fecha: archivo cargado} y si ya está todo lo necesario para procesar: las
-    fechas se conocen (el archivo de origen está cargado y es válido) y, si la entrada es
-    obligatoria, hay un archivo por cada fecha.
+    Cada archivo se valida y analiza apenas se carga: debajo de su cargador aparece la
+    información calculada (o el error) y el detalle va al log de carga. Devuelve {fecha: archivo cargado} y si ya está todo lo necesario para
+    procesar: las fechas se conocen (el archivo de origen está cargado y es válido), ningún
+    archivo cargado tiene errores y, si la entrada es obligatoria, hay uno por cada fecha.
     """
     source_key, column = spec.per_date
     source = next(s for s in input_specs(stage) if s.key == source_key)
@@ -124,6 +214,7 @@ def date_uploaders(spec) -> tuple[dict, bool]:
         return {}, True
     st.caption(f"Cargue un solo archivo .xlsx por cada fecha de {column} ({len(days)} en total).")
     loaded = {}
+    all_valid = True
     for day in days:
         uploaded = st.file_uploader(
             date_label(spec, day),
@@ -133,7 +224,9 @@ def date_uploaders(spec) -> tuple[dict, bool]:
         )
         if uploaded is not None:
             loaded[day] = uploaded
-    return loaded, len(loaded) == len(days) or not spec.required
+            # Un archivo con errores bloquea Procesar: el procesamiento se detendría por lo mismo.
+            all_valid = show_analysis(uploaded, load_analysis(spec, day, uploaded)) and all_valid
+    return loaded, all_valid and (len(loaded) == len(days) or not spec.required)
 
 
 files = {}
@@ -165,11 +258,6 @@ missing_required = bool(incomplete_date_inputs) or any(
     spec.required and not files[spec.key] for spec in input_specs(stage) if not spec.per_date
 )
 uploaded_count = sum(len(f) for f in files.values())
-
-
-def show_step_log(placeholder, lines: list[str]) -> None:
-    """Muestra el log de ejecución como un bloque de texto, una línea por paso y resultado."""
-    placeholder.code("\n".join(lines), language=None)
 
 
 # Fila de botones: Procesar y, cuando hay resultados, las descargas y «Nuevo procesamiento».
@@ -206,16 +294,6 @@ if buttons_row.button("Procesar", type="primary", icon=":material/play_arrow:", 
 # --- Resultados ------------------------------------------------------------
 
 
-def show_actions(actions) -> None:
-    """Tabla con todo lo que se hizo, en el orden en que ocurrió."""
-    if actions.empty:
-        st.write("No se hizo ningún cambio, eliminación ni hallazgo.")
-        return
-    st.caption(f"{len(actions)} acciones, en el orden en que se hicieron.")
-    # Las celdas vacías se muestran en blanco, no como "None".
-    st.dataframe(actions.fillna("").astype(str), hide_index=True, width="stretch")
-
-
 def show_results(result, saved_paths, buttons_row) -> None:
     """Muestra los botones de descarga junto a Procesar, el log de ejecución, la tabla de
     acciones y la ruta de la copia guardada."""
@@ -250,6 +328,8 @@ def show_results(result, saved_paths, buttons_row) -> None:
 
 
 result = st.session_state.result
+if (result is None or st.session_state.result_stage != stage_index) and load_log["lines"]:
+    show_load_log()
 if result is not None and st.session_state.result_stage == stage_index:
     try:
         show_results(result, st.session_state.saved_paths, buttons_row)

@@ -32,8 +32,19 @@ PAYMENT_COLUMN_TYPES = INPUTS["treasury_reports"]["columns"]
 def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     # Los informes de pago solo se depuran en memoria: no hacen parte del archivo de salida
     # y el archivo original nunca se modifica.
+    analyze_payments(inputs["treasury_reports"], audit)
+    return inputs["ety_processed"]
+
+
+def analyze_payments(payments: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
+    """Reglas de los informes de pago, en orden: LIM-201, VAL-201, TIP-003/005, DUP-201 y TRA-201.
+
+    La usa process() con todos los informes y analyze_payment_report() con cada informe
+    apenas se carga, para que Procesar aplique exactamente las mismas reglas. Devuelve
+    los pagos depurados.
+    """
     audit.step(f"Tomando de los informes de pago los registros con {BUSINESS_UNIT_COLUMN} {BUSINESS_UNIT}")
-    payments = filter_business_unit(inputs["treasury_reports"], audit)
+    payments = filter_business_unit(payments, audit)
     audit.step(f"Verificando que la {EXECUTION_DATE_COLUMN} corresponda a la fecha de cada informe")
     check_execution_dates(payments, audit)
     audit.step(f"Convirtiendo {PAYMENT_VOUCHER_COLUMN} a código e {PAYMENT_GROSS_COLUMN} a moneda")
@@ -42,7 +53,28 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     payments = remove_repeated_vouchers(payments, audit)
     audit.step(f"Calculando el total de {PAYMENT_GROSS_COLUMN}")
     report_gross_totals(payments, audit)
-    return inputs["ety_processed"]
+    return payments
+
+
+def analyze_payment_report(report: pd.DataFrame, audit: AuditLog) -> list[str]:
+    """Analiza un informe de pago apenas se carga (INPUT_ANALYSIS en __init__.py).
+
+    Aplica las mismas reglas que Procesar y devuelve la información calculada que la
+    interfaz muestra debajo del campo del informe: cuántos registros son del FCP, cuántos
+    comprobantes repetidos se descartaron y el total de Impt Bruto.
+    """
+    payments = analyze_payments(report, audit)
+    discarded = sum(1 for removal in audit.removals if removal.rule == "DUP-201")
+    is_number = payments[PAYMENT_GROSS_COLUMN].map(_is_number).astype(bool)
+    total = payments.loc[is_number, PAYMENT_GROSS_COLUMN].sum()
+    lines = [
+        f"Registros con {BUSINESS_UNIT_COLUMN} {BUSINESS_UNIT}: {len(payments) + discarded} de {len(report)}",
+        f"Registros descartados por {PAYMENT_VOUCHER_COLUMN} repetido: {discarded}",
+        f"Total de {PAYMENT_GROSS_COLUMN}: {money(total)} en {_records(is_number.sum())}",
+    ]
+    if not is_number.all():
+        lines.append(f"Sin {PAYMENT_GROSS_COLUMN} numérico (no se sumaron): {_records((~is_number).sum())}")
+    return lines
 
 
 def filter_business_unit(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
@@ -127,7 +159,7 @@ def report_gross_totals(df: pd.DataFrame, audit: AuditLog) -> None:
     Se calcula después de dejar un registro por comprobante. Los valores que no son
     número (ya reportados como Error al convertir) no se suman, y se avisa cuántos son.
     """
-    is_number = df[PAYMENT_GROSS_COLUMN].map(lambda value: isinstance(value, (int, float)) and not is_empty(value))
+    is_number = df[PAYMENT_GROSS_COLUMN].map(_is_number).astype(bool)
     for (name, day), rows in df.groupby([SOURCE_FILE, INPUT_DATE], sort=False):
         numbers = is_number[rows.index]
         total = rows.loc[numbers, PAYMENT_GROSS_COLUMN].sum()
@@ -154,6 +186,10 @@ def money(value: float) -> str:
     """Valor en formato de moneda colombiano, para los mensajes: $ 1.234.567,89."""
     text = f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
     return f"$ {text}"
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not is_empty(value)
 
 
 def _records(count: int) -> str:
