@@ -98,6 +98,7 @@ def build_output(
     findings: list[Finding],
     column_formats: dict[str, str] | None = None,
     style: SheetStyle | None = None,
+    rule_fills: dict[str, str] | None = None,
 ) -> bytes:
     """Genera el archivo de salida: datos procesados sin columnas internas.
 
@@ -105,13 +106,14 @@ def build_output(
     las demás columnas usan el formato según el tipo de valor.
     `style` es la apariencia del archivo original (nombre de la hoja, encabezados,
     fuentes y anchos), que se repite en la salida.
-    Las celdas con hallazgos se resaltan según la severidad.
+    Las celdas con hallazgos se resaltan según la severidad, o con el color de su regla
+    si la etapa lo define en `rule_fills` ({código de regla: color RGB}).
     """
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = style.sheet_name if style else "Datos"
     write_table(sheet, df[data_columns(df)], column_formats, style)
-    _highlight_findings(sheet, df, findings)
+    _highlight_findings(sheet, df, findings, rule_fills or {})
     return to_bytes(workbook)
 
 
@@ -277,8 +279,14 @@ def _adjust_widths(sheet: Worksheet) -> None:
         sheet.column_dimensions[letter].width = min(longest + 2, MAX_COLUMN_WIDTH)
 
 
-def _highlight_findings(sheet: Worksheet, df: pd.DataFrame, findings: list[Finding]) -> None:
-    """Colorea las celdas que tienen hallazgos. Si el registro o la columna ya no están, se omite."""
+def _highlight_findings(
+    sheet: Worksheet, df: pd.DataFrame, findings: list[Finding], rule_fills: dict[str, str]
+) -> None:
+    """Colorea las celdas que tienen hallazgos. Si el registro o la columna ya no están, se omite.
+
+    Si una celda tiene varios hallazgos, gana el de mayor severidad; con la misma severidad,
+    el último registrado.
+    """
     if SOURCE_FILE not in df.columns or SOURCE_ROW not in df.columns:
         return
     output_rows = {
@@ -287,7 +295,7 @@ def _highlight_findings(sheet: Worksheet, df: pd.DataFrame, findings: list[Findi
     }
     output_columns = {c: i + 1 for i, c in enumerate(data_columns(df))}
 
-    severity_by_cell: dict[tuple[int, int], str] = {}
+    finding_by_cell: dict[tuple[int, int], Finding] = {}
     for finding in findings:
         if finding.severity not in SEVERITY_FILLS:
             continue
@@ -295,10 +303,10 @@ def _highlight_findings(sheet: Worksheet, df: pd.DataFrame, findings: list[Findi
         column = output_columns.get(finding.column)
         if row is None or column is None:
             continue
-        current = severity_by_cell.get((row, column))
-        if current is None or SEVERITY_PRIORITY.index(finding.severity) < SEVERITY_PRIORITY.index(current):
-            severity_by_cell[(row, column)] = finding.severity
+        current = finding_by_cell.get((row, column))
+        if current is None or SEVERITY_PRIORITY.index(finding.severity) <= SEVERITY_PRIORITY.index(current.severity):
+            finding_by_cell[(row, column)] = finding
 
-    for (row, column), severity in severity_by_cell.items():
-        color = SEVERITY_FILLS[severity]
+    for (row, column), finding in finding_by_cell.items():
+        color = rule_fills.get(finding.rule, SEVERITY_FILLS[finding.severity])
         sheet.cell(row=row, column=column).fill = PatternFill("solid", start_color=color, end_color=color)

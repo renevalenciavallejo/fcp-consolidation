@@ -88,6 +88,8 @@ def main(argv: list[str] | None = None) -> int:
         print(UNEXPECTED_ERROR_MESSAGE)
         return 1
 
+    for line in result.notice:
+        print(line)
     print(f"Archivo procesado: {output_path}")
     print(f"Log:               {log_path}")
     return 0

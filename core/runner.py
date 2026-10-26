@@ -8,7 +8,7 @@ decide qué hacer con ellos.
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from types import ModuleType
@@ -49,6 +49,8 @@ class StageResult:
     log_file_name: str
     output_bytes: bytes
     log_bytes: bytes
+    # Notificación de la etapa con los resultados (RESULT_NOTICE), para mostrar al terminar.
+    notice: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -151,7 +153,10 @@ def run_stage(
     input_files = [
         InputFileInfo(spec.label, r.file_name, r.rows) for spec in specs for r in read_results[spec.key]
     ]
-    output_bytes = build_output(output, audit.findings, output_formats(specs), output_style(read_results))
+    output_bytes = build_output(
+        output, audit.findings, output_formats(specs), output_style(read_results),
+        getattr(stage, "RULE_FILLS", {}),
+    )
     summary = RunSummary(
         stage_name=stage.NAME,
         started_at=started_at,
@@ -171,7 +176,8 @@ def run_stage(
     audit.note(f"Terminado en {summary.duration_seconds:.1f} s".replace(".", ","))
     audit.finish_step()
     log_bytes = build_log(summary, audit)
-    return StageResult(summary, audit, output_name, log_name, output_bytes, log_bytes)
+    notice = stage.RESULT_NOTICE(audit) if hasattr(stage, "RESULT_NOTICE") else []
+    return StageResult(summary, audit, output_name, log_name, output_bytes, log_bytes, notice)
 
 
 def result_file_names(stage: ModuleType, input_names: list[str]) -> tuple[str, str]:
@@ -323,6 +329,23 @@ def load_date_sources(stage: ModuleType, files: StageFiles, audit: AuditLog | No
         dates[spec.key] = dates_in(data[source_key], column)
     audit.finish_step()
     return DateSources(dates, data)
+
+
+def validate_input(stage: ModuleType, key: str, files: list[Any], audit: AuditLog | None = None) -> pd.DataFrame:
+    """Lee y valida los archivos de una entrada apenas se cargan, sin esperar a Procesar.
+
+    Sirve para que la interfaz muestre de inmediato si la estructura no es la esperada.
+    Devuelve los datos leídos y lanza StageError con los problemas encontrados. Si se pasa
+    `audit`, la lectura y la validación quedan en ese log. No genera archivos: Procesar
+    vuelve a leer y validar todo.
+    """
+    spec = _spec(input_specs(stage), key)
+    if audit is None:
+        audit = AuditLog(stage_rules(stage))
+    results = [read_and_report(f, spec, audit) for f in files]
+    _stop_on_structure_problems({key: results}, {key: files}, audit)
+    audit.finish_step()
+    return combine(results, spec)
 
 
 def analyze_date_file(

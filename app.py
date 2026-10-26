@@ -19,6 +19,7 @@ from core.runner import (
     load_date_sources,
     run_stage,
     save_result,
+    validate_input,
 )
 from core.settings import APP_NAME, APP_VERSION, DOWNLOAD_BUTTON_COLOR, DOWNLOAD_BUTTON_HOVER_COLOR
 from core.stage import applied_rules, date_label, input_specs, stage_rules
@@ -76,6 +77,7 @@ def reset() -> None:
     st.session_state.uploader_version += 1
     st.session_state.saved_reports = {}
     st.session_state.analysis_cache = {}
+    st.session_state.validation_cache = {}
 
 
 # --- Barra lateral ---------------------------------------------------------
@@ -142,6 +144,47 @@ def load_dates(source_files: list):
     sources, lines, actions = cache[cache_key]
     add_to_load_log(lines, actions)
     return sources
+
+
+def validate_upload(spec, uploaded_files: list) -> StageError | None:
+    """Valida la estructura de los archivos de una entrada apenas se cargan (o devuelve el error).
+
+    Solo la estructura: las reglas de la etapa se aplican al procesar. Se guarda en
+    session_state por archivo cargado, como las fechas, para no leer el archivo otra vez
+    con cada clic. La lectura y la validación quedan en el log de carga.
+    """
+    cache_key = (stage_index, spec.key, file_ids(uploaded_files))
+    cache = st.session_state.setdefault("validation_cache", {})
+    if cache_key not in cache:
+        audit = AuditLog(stage_rules(stage))
+        names = ", ".join(f"«{f.name}»" for f in uploaded_files)
+        try:
+            # Un archivo grande (como el AP Voucher) tarda en leerse: el mensaje evita que la
+            # pantalla parezca congelada. Aparece debajo del cargador.
+            with st.spinner(f"Validando la estructura de {names}… Si el archivo es grande, puede tardar unos segundos."):
+                validate_input(stage, spec.key, uploaded_files, audit)
+            cache[cache_key] = (None, audit.step_lines())
+        except StageError as error:
+            cache[cache_key] = (error, error.steps)
+        except Exception as error:
+            # Nunca mostrar un traceback: el detalle queda en errores.log. No se guarda, para reintentar.
+            log_exception(error)
+            return StageError(UNEXPECTED_ERROR_MESSAGE, [])
+    error, lines = cache[cache_key]
+    add_to_load_log(lines)
+    return error
+
+
+def show_validation_error(error: StageError | None) -> bool:
+    """Debajo del cargador, el error de estructura (si pasa la validación no se muestra nada).
+
+    Devuelve si los archivos son válidos.
+    """
+    if error is None:
+        return True
+    problems = "\n".join(f"- {p}" for p in error.problems)
+    st.error(f"{error.message}\n\n{problems}\n\nCorrija el archivo y vuelva a cargarlo.")
+    return False
 
 
 def show_step_log(placeholder, lines: list[str]) -> None:
@@ -314,10 +357,15 @@ def saved_file_input(spec, day):
 files = {}
 # Entradas por fecha que todavía no tienen lo necesario para procesar.
 incomplete_date_inputs = []
+# Entradas cuyos archivos no pasaron la validación al cargarlos: bloquean Procesar.
+invalid_inputs = []
 # Zona de los botones (Procesar, descargas, «Nuevo procesamiento») y de sus mensajes. En una
 # etapa con entradas por fecha va justo debajo del primer cargador (el reporte ETY), para que
 # los botones se vean sin bajar hasta los informes de cada fecha.
 has_date_inputs = any(spec.per_date for spec in input_specs(stage))
+# La estructura de cada entrada se valida apenas se carga. Las entradas por fecha y las que
+# son su origen ya las valida date_uploaders (al buscar las fechas y al analizar cada archivo).
+date_sources = {spec.per_date[0] for spec in input_specs(stage) if spec.per_date}
 buttons_area = None
 for spec in input_specs(stage):
     if spec.per_date:
@@ -340,10 +388,13 @@ for spec in input_specs(stage):
         files[spec.key] = [uploaded] if uploaded is not None else []
     for warning in file_name_warnings(spec, files[spec.key]):
         st.warning(warning, icon=":material/warning:")
+    if spec.key not in date_sources and files[spec.key]:
+        if not show_validation_error(validate_upload(spec, files[spec.key])):
+            invalid_inputs.append(spec.key)
     if has_date_inputs and buttons_area is None:
         buttons_area = st.container()
 
-missing_required = bool(incomplete_date_inputs) or any(
+missing_required = bool(incomplete_date_inputs) or bool(invalid_inputs) or any(
     spec.required and not files[spec.key] for spec in input_specs(stage) if not spec.per_date
 )
 uploaded_count = sum(len(f) for f in files.values())
@@ -438,6 +489,10 @@ def show_results(result, saved_paths, buttons_row) -> None:
     buttons_row.button("Nuevo procesamiento", icon=":material/restart_alt:", on_click=reset)
 
     buttons_area.success("Procesamiento terminado. Revise el log antes de pasar a la siguiente etapa.")
+    if result.notice:
+        # «$» se escapa: en Markdown, dos signos de pesos en un texto se toman como una fórmula.
+        details = "\n".join(bullet(line.replace("$", "\\$")) for line in result.notice)
+        buttons_area.info(f"**Resultados**\n\n{details}", icon=":material/info:")
 
     with log_section.container():
         tab_log, tab_actions = st.tabs(["Log de ejecución", "Acciones realizadas"])
