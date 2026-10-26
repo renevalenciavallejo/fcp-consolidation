@@ -293,8 +293,7 @@ def saved_file_input(spec, day):
         st.rerun()
     st.markdown(date_label(spec, day))
     row = st.container(horizontal=True, vertical_alignment="center")
-    size = f"{len(saved.data) / 1024:.1f}".replace(".", ",")
-    row.markdown(f":material/description: «{saved.name}» · {size} KB")
+    row.markdown(f":material/description: «{saved.name}»")
     row.button(
         "Quitar", icon=":material/close:", key=f"remove_{stage_index}_{spec.key}_{day.isoformat()}",
         on_click=st.session_state.saved_reports.pop, args=(store_key, None),
