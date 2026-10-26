@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 3 – Validación con el AP Voucher: carga y validación de la estructura del reporte ETY procesado en la Etapa 2 (25 columnas en orden, encabezados en la fila 1; advertencia si el nombre no contiene `E02_procesado`) y carga del archivo AP Voucher (por ahora solo se verifica que abra como .xlsx). Las validaciones contra el AP Voucher se agregarán a medida que se especifiquen.
 - Etapa 2: la advertencia del nombre del reporte ETY aparece solo si el nombre no contiene `E01_procesado` (antes, si no terminaba en `_E01_procesado`). La opción de entrada `name_suffix` pasa a ser `name_contains`.
 - El archivo descargado conserva el nombre del archivo cargado y cambia la marca de la etapa anterior por la de la etapa actual en el mismo lugar (`ETY_E01_procesado_v2` → `ETY_E02_procesado_v2`); antes, si la marca no estaba al final, se agregaba otra.
 - Etapa 2: el botón Procesar y, al terminar, los de descarga y «Nuevo procesamiento» quedan justo debajo del campo del reporte ETY.
