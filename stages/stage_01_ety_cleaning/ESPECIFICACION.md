@@ -79,7 +79,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 | TRA-102 | Los registros se ordenan por Comprobante para que los repetidos queden juntos. El orden es estable (dentro del mismo comprobante se conserva el orden original) y los vacíos irían al final. |
 
 - No se elimina ningún registro: el usuario decide si es un duplicado real.
-- Se cuentan solo los registros que siguen en el archivo: las filas de «Distribución Caja» y los duplicados del paso 7 ya se eliminaron. Por eso la revisión VAL-101 se ejecuta **después** del paso 7 (el ordenamiento TRA-102 va antes).
+- Se cuentan solo los registros que siguen en el archivo: las filas de «Distribución Caja», los duplicados del paso 7 y los registros del paso 8 (LIM-103) ya se eliminaron. Por eso la revisión VAL-101 se ejecuta **al final**, después del paso 8 (el ordenamiento TRA-102 va antes).
 - El ordenamiento queda en la hoja *Acciones* del log («Transformación»). La columna *Fila* sigue indicando la fila del reporte original.
 - En los reportes de ejemplo, antes del paso 7 había 17 comprobantes repetidos (38 registros) y 18 (36 registros); después de la regla LIM-102 y del paso 7 quedan resaltados 14 registros en cada uno.
 
@@ -119,6 +119,17 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 - Cada fila eliminada queda en la hoja *Acciones* con el motivo «Duplicado de la fila N (Comprobante X, caso 2.1/2.2)». En el log de ejecución se listan además los comprobantes de los grupos conservados por los casos 2.3 y 2.4.
 - En los reportes de ejemplo se eliminan 12 filas (…38426564) y 11 filas (…38393197). Ya no queda ningún grupo en el caso 2.4: el comprobante 00158196, que difiere en Dpto y Producto, pasa al caso 2.2 (se conserva la fila 407 y se eliminan la 408, la 409 y la 410).
 
+### Paso 8 – Eliminar los registros sin Programa de rendimientos y pagos de ReteICA (implementado)
+
+| Código | Regla |
+| --- | --- |
+| LIM-103 | Se eliminan los registros que no tienen valor en **Programa** (columna Y del archivo de salida) y cuyo **Más Info** (columna R) contiene alguno de estos textos: «REN-RENDIMIENTOS», «Pago de ReteICA» o «rendimientos bancarios». |
+
+- El texto se busca dentro de la celda (puede tener más contenido antes o después), sin tener en cuenta mayúsculas, tildes ni espacios sobrantes.
+- Una celda de Programa con solo espacios cuenta como vacía. Si el registro tiene Programa, se conserva aunque Más Info contenga alguno de los textos.
+- Se ejecuta después del paso 7 y antes de la revisión VAL-101, para que los registros eliminados no cuenten como comprobantes repetidos.
+- Cada fila eliminada queda en la hoja *Acciones* con el motivo «Sin Programa y Más Info con «<texto encontrado>»».
+
 ### Pasos siguientes (por especificar)
 
 - Limpieza de textos, conversión de tipos, duplicados, validaciones y transformaciones.
@@ -126,7 +137,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 ## Archivo de salida
 
-Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O), sin los comprobantes con VR. BRUTO en 0 (LIM-102) y sin los duplicados del paso 7.
+Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O), sin los comprobantes con VR. BRUTO en 0 (LIM-102), sin los duplicados del paso 7 y sin los registros sin Programa de rendimientos y pagos de ReteICA (LIM-103).
 
 El archivo conserva la apariencia del reporte original: el nombre de la hoja (por ejemplo, «sheet1»), los encabezados en Arial 10 negrita con fondo gris y borde doble, la fuente de los datos y los anchos de columna. La columna Diferencia toma el estilo de Importe. Las fechas se muestran como `dd/mm/aaaa` y las columnas E a K con formato de moneda; además, el encabezado tiene filtros y queda inmovilizado.
 

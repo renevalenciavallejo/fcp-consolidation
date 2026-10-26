@@ -25,6 +25,9 @@ from stages.stage_01_ety_cleaning.config import (
     DUPLICATE_TOLERATED_COLUMNS,
     GROSS_AMOUNT_COLUMN,
     INPUTS,
+    MORE_INFO_COLUMN,
+    NO_PROGRAM_REMOVAL_TEXTS,
+    PROGRAM_COLUMN,
     VOUCHER_COLUMN,
 )
 
@@ -48,7 +51,9 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     df = remove_zero_gross_vouchers(df, audit)
     audit.step(f"Eliminando registros duplicados por {VOUCHER_COLUMN} (con {DIFFERENCE_COLUMN} 0)")
     df = remove_duplicate_vouchers(df, audit)
-    # Después de depurar duplicados, para que solo se marquen los que siguen repetidos.
+    audit.step(f"Eliminando los registros sin {PROGRAM_COLUMN} por su {MORE_INFO_COLUMN}")
+    df = remove_no_program_rows(df, audit)
+    # Al final de la depuración, para que solo se marquen los que siguen repetidos.
     audit.step(f"Revisando registros con {VOUCHER_COLUMN} repetido")
     flag_repeated_vouchers(df, audit)
     return df
@@ -222,3 +227,25 @@ def remove_duplicate_vouchers(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame
             groups = "Se conserva 1 grupo" if count == 1 else f"Se conservan {count} grupos"
             audit.note(f"{groups} porque {label} (caso {case}): {vouchers}")
     return df
+
+
+def remove_no_program_rows(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
+    """Elimina los registros sin Programa (columna Y) cuyo Más Info (columna R) contiene
+    alguno de los textos de NO_PROGRAM_REMOVAL_TEXTS. Regla LIM-103.
+
+    El texto se busca dentro de la celda, sin tener en cuenta mayúsculas, tildes ni
+    espacios sobrantes. Cada eliminada queda en la hoja Acciones con el texto encontrado.
+    """
+    targets = [(text, comparable_text(text)) for text in NO_PROGRAM_REMOVAL_TEXTS]
+    to_remove = pd.Series(False, index=df.index)
+    reasons = pd.Series("", index=df.index, dtype=object)
+    for index, row in df.iterrows():
+        # comparable_text deja vacía una celda con solo espacios: cuenta como sin Programa.
+        if comparable_text(row[PROGRAM_COLUMN]):
+            continue
+        more_info = comparable_text(row[MORE_INFO_COLUMN])
+        found = next((text for text, target in targets if target in more_info), None)
+        if found:
+            to_remove.at[index] = True
+            reasons.at[index] = f"Sin {PROGRAM_COLUMN} y {MORE_INFO_COLUMN} con «{found}»"
+    return audit.remove_rows(df, to_remove, "LIM-103", reasons)

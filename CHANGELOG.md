@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 1: después de eliminar duplicados y antes de señalar los comprobantes repetidos, se eliminan los registros sin Programa cuyo Más Info contiene «REN-RENDIMIENTOS», «Pago de ReteICA» o «rendimientos bancarios» (regla LIM-103). Cada uno queda en la hoja Acciones del log.
 - Etapa 2: se identifican los comprobantes del reporte ETY que no están en el informe de pago de su fecha (regla VAL-203). Al cargar el informe, la notificación se pone roja y lista cada comprobante con su VR. BRUTO (hasta 20); al procesar, cada uno queda como Error en su registro del ETY (resaltado en la salida y en Acciones). No detiene el procesamiento.
 - Etapa 2: los informes de pago se conservan por fecha. Si se corrige el reporte ETY y se vuelve a cargar (o se carga otro), las fechas que ya tenían informe lo reutilizan y se vuelven a validar contra el nuevo ETY, sin cargarlos de nuevo; las fechas nuevas piden archivo. Cada informe se muestra con un botón «Quitar» para reemplazarlo. «Nuevo procesamiento» los borra.
 - Etapa 2: el total de Impt Bruto de cada informe de pago se compara con el total de VR. BRUTO del reporte ETY de la misma FECHA DE PAGO (regla VAL-202). Al cargar el informe, la sección debajo de su campo queda verde si son iguales y roja si no (con la diferencia resaltada y solo los dos totales); al procesar, la diferencia queda en el log. No detiene el procesamiento.

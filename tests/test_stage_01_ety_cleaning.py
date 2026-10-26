@@ -278,6 +278,7 @@ def test_step_log_shows_each_rule():
         "▸ Ordenando por Comprobante",
         "▸ Eliminando los comprobantes con VR. BRUTO en 0 (con Diferencia 0)",
         "▸ Eliminando registros duplicados por Comprobante (con Diferencia 0)",
+        "▸ Eliminando los registros sin Programa por su Más Info",
         "▸ Revisando registros con Comprobante repetido",
         "▸ Generando el archivo de salida y el log",
     ]
@@ -487,6 +488,43 @@ def test_zero_gross_rule_runs_before_duplicates():
     assert [(r.source_row, r.rule) for r in result.audit.removals[3:]] == [(5, "LIM-102"), (6, "LIM-102")]
 
 
+# --- Registros sin Programa de rendimientos y pagos de ReteICA (LIM-103) -------
+
+
+def no_program_removed(result):
+    return [(r.source_row, r.reason) for r in result.audit.removals if r.rule == "LIM-103"]
+
+
+def test_rows_without_program_and_matching_more_info_are_removed():
+    rows = (
+        with_voucher("1", Programa=None, **{"Más Info": "REN-RENDIMIENTOS SEPTIEMBRE"}),
+        with_voucher("2", Programa=" ", **{"Más Info": "pago de reteica 2026"}),   # Solo espacios = vacío
+        with_voucher("3", Programa=None, **{"Más Info": "Traslado de  Rendimientos Bancarios"}),
+        with_voucher("4", Programa=None),                                         # Más Info sin los textos
+    )
+    result = run(ety_file(rows=rows))
+    assert no_program_removed(result) == [
+        (5, "Sin Programa y Más Info con «REN-RENDIMIENTOS»"),
+        (6, "Sin Programa y Más Info con «Pago de ReteICA»"),
+        (7, "Sin Programa y Más Info con «rendimientos bancarios»"),
+    ]
+    assert [r["Comprobante"] for r in output_rows(result)] == ["4"]
+
+
+def test_rows_with_program_are_kept_even_with_matching_more_info():
+    result = run(ety_file(rows=(with_voucher("1", **{"Más Info": "REN-RENDIMIENTOS"}),)))
+    assert no_program_removed(result) == []
+    assert len(output_rows(result)) == 1
+
+
+def test_no_program_rule_runs_before_repeated_voucher_review():
+    # El comprobante 1 queda con un solo registro: no se señala como repetido.
+    rows = (with_voucher("1"), with_voucher("1", Proy="X", Programa=None, **{"Más Info": "Pago de ReteICA"}))
+    result = run(ety_file(rows=rows))
+    assert no_program_removed(result) == [(6, "Sin Programa y Más Info con «Pago de ReteICA»")]
+    assert [f for f in result.audit.findings if f.rule == "VAL-101"] == []
+
+
 # --- Reglas que consulta el usuario --------------------------------------------
 
 
@@ -494,11 +532,13 @@ def test_applied_rules_follow_the_processing_order():
     codes = [code for code, _ in applied_rules(stage_01_ety_cleaning)]
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",
-        "LIM-003", "TIP-005", "LIM-101", "TRA-101", "TRA-102", "LIM-102", "DUP-101", "DUP-102", "VAL-101",
+        "LIM-003", "TIP-005", "LIM-101", "TRA-101", "TRA-102", "LIM-102", "DUP-101", "DUP-102", "LIM-103",
+        "VAL-101",
     ]
     # Las reglas propias aparecen en el mismo orden en que se aplican en el log de acciones.
     rows = (zero_gross("9"), with_voucher("1"), with_voucher("1"), with_voucher("2"), with_voucher("2", Cuenta="X"),
-            with_voucher("3", "Distribución Caja"), with_voucher("4"), with_voucher("4", Dpto="X"))
+            with_voucher("3", "Distribución Caja"), with_voucher("4"), with_voucher("4", Dpto="X"),
+            with_voucher("5", Programa=None, **{"Más Info": "Pago de ReteICA"}))
     applied = list(dict.fromkeys(run(ety_file(rows=rows)).audit.actions_df()["Regla"]))
     assert applied == [c for c in codes if c in applied]
 
@@ -508,4 +548,4 @@ def test_rules_sheet_in_log():
     rows = list(sheet.iter_rows(values_only=True))
     assert rows[0] == ("Orden", "Código", "Regla")
     assert rows[1] == (1, "EST-007", "Validar que se carguen los archivos obligatorios y no sobren archivos")
-    assert len(rows) == 17
+    assert len(rows) == 18

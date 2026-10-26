@@ -75,6 +75,14 @@ DUPLICATE_TOLERATED_COLUMNS = ["Dpto", "Cd Fnd", "Producto"]
 # Caso 2.3: si difieren en alguna de estas, no se elimina ninguna fila del grupo.
 DUPLICATE_BLOCKING_COLUMNS = ["Subfideicomiso", "Cuenta", "Programa"]
 
+# Antes de VAL-101 se eliminan los registros sin valor en PROGRAM_COLUMN (columna Y del
+# archivo de salida) cuyo MORE_INFO_COLUMN (columna R) contiene alguno de estos textos.
+# Se busca el texto dentro de la celda, sin tener en cuenta mayúsculas, tildes ni
+# espacios sobrantes.
+PROGRAM_COLUMN = "Programa"
+MORE_INFO_COLUMN = "Más Info"
+NO_PROGRAM_REMOVAL_TEXTS = ["REN-RENDIMIENTOS", "Pago de ReteICA", "rendimientos bancarios"]
+
 # Reglas propias de la etapa, en el orden en que se aplican.
 # Se usa la serie 1xx para no chocar con las reglas comunes.
 RULES = {
@@ -84,6 +92,7 @@ RULES = {
     "LIM-102": "Eliminar los registros con Diferencia 0 de un Comprobante cuando VR. BRUTO es 0 (o está vacío) en todos ellos",
     "DUP-101": "Eliminar registros idénticos con el mismo Comprobante y Diferencia 0, sin comparar FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc (caso 2.1)",
     "DUP-102": "Eliminar registros con el mismo Comprobante y Diferencia 0 que solo difieren en Dpto, Cd Fnd y/o Producto, sin comparar FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc (caso 2.2)",
+    "LIM-103": "Eliminar los registros sin Programa cuyo Más Info contiene «REN-RENDIMIENTOS», «Pago de ReteICA» o «rendimientos bancarios»",
     "VAL-101": "Identificar los registros con Comprobante repetido",
 }
 
