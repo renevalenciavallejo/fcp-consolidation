@@ -49,6 +49,9 @@ st.html(f"""
 st.session_state.setdefault("result", None)
 st.session_state.setdefault("saved_paths", None)
 st.session_state.setdefault("result_stage", None)
+# Archivos con los que se obtuvo el resultado: si el usuario cambia alguno, los resultados
+# dejan de mostrarse para que no descargue un archivo que ya no corresponde.
+st.session_state.setdefault("result_files", None)
 st.session_state.setdefault("uploader_version", 0)
 # Archivos de las entradas por fecha (por ejemplo, los informes de pago), por etapa, entrada y
 # fecha. Se guardan aquí y no en el cargador para conservarlos si se vuelve a cargar el ETY.
@@ -69,6 +72,7 @@ def reset() -> None:
     st.session_state.result = None
     st.session_state.saved_paths = None
     st.session_state.result_stage = None
+    st.session_state.result_files = None
     st.session_state.uploader_version += 1
     st.session_state.saved_reports = {}
     st.session_state.analysis_cache = {}
@@ -217,7 +221,10 @@ def bullet(line: str) -> str:
 
 
 def show_load_log() -> None:
-    """Pestañas con lo que se hizo al cargar los archivos, igual que los resultados de Procesar."""
+    """Pestañas con lo que se hizo al cargar los archivos, igual que los resultados de Procesar.
+
+    Van en log_section, la misma sección donde Procesar muestra el log en vivo y los resultados.
+    """
     st.caption("Lo que se hizo al cargar los archivos. Al procesar, se reemplaza por el log completo.")
     tab_log, tab_actions = st.tabs(["Log de ejecución", "Acciones realizadas"])
     with tab_log:
@@ -307,6 +314,11 @@ def saved_file_input(spec, day):
 files = {}
 # Entradas por fecha que todavía no tienen lo necesario para procesar.
 incomplete_date_inputs = []
+# Zona de los botones (Procesar, descargas, «Nuevo procesamiento») y de sus mensajes. En una
+# etapa con entradas por fecha va justo debajo del primer cargador (el reporte ETY), para que
+# los botones se vean sin bajar hasta los informes de cada fecha.
+has_date_inputs = any(spec.per_date for spec in input_specs(stage))
+buttons_area = None
 for spec in input_specs(stage):
     if spec.per_date:
         files[spec.key], complete = date_uploaders(spec)
@@ -328,23 +340,36 @@ for spec in input_specs(stage):
         files[spec.key] = [uploaded] if uploaded is not None else []
     for warning in file_name_warnings(spec, files[spec.key]):
         st.warning(warning, icon=":material/warning:")
+    if has_date_inputs and buttons_area is None:
+        buttons_area = st.container()
 
 missing_required = bool(incomplete_date_inputs) or any(
     spec.required and not files[spec.key] for spec in input_specs(stage) if not spec.per_date
 )
 uploaded_count = sum(len(f) for f in files.values())
+if buttons_area is None:
+    buttons_area = st.container()   # Sin entradas por fecha: debajo de todos los cargadores
+# Sección de abajo, con las pestañas «Log de ejecución» y «Acciones realizadas»: muestra lo
+# que se hizo al cargar los archivos, el log en vivo mientras se procesa y luego los resultados.
+log_section = st.empty()
 
 
-# Fila de botones: Procesar y, cuando hay resultados, las descargas y «Nuevo procesamiento».
-buttons_row = st.container(horizontal=True)
+def process_files() -> bool:
+    """Ejecuta la etapa con los archivos cargados, mostrando el log en vivo, y guarda el resultado.
 
-if buttons_row.button("Procesar", type="primary", icon=":material/play_arrow:", disabled=missing_required):
+    Devuelve si terminó sin errores. Si se detiene, el error y el log quedan en pantalla.
+    """
     st.session_state.result = None
     # Espacio para el mensaje de error, justo debajo del botón (como el mensaje de éxito).
-    message_area = st.empty()
-    # Log en vivo, siempre visible. Al terminar se vacía: los resultados (abajo) lo vuelven a mostrar.
-    # Si el proceso se detiene, queda en pantalla para ver en qué paso falló.
-    log_placeholder = st.empty()
+    message_area = buttons_area.empty()
+    # Log en vivo, en la pestaña «Log de ejecución» de la sección de abajo (reemplaza el log de
+    # carga). Al terminar, los resultados ocupan su lugar; si el proceso se detiene, queda en
+    # pantalla para ver en qué paso falló.
+    with log_section.container():
+        st.caption("Procesando… El log completo y las acciones aparecen al terminar.")
+        tab_log, tab_actions = st.tabs(["Log de ejecución", "Acciones realizadas"])
+        log_placeholder = tab_log.empty()
+        tab_actions.write("Las acciones aparecen al terminar el procesamiento.")
     lines: list[str] = []
 
     def show_line(line: str) -> None:
@@ -352,12 +377,12 @@ if buttons_row.button("Procesar", type="primary", icon=":material/play_arrow:", 
         show_step_log(log_placeholder, lines)
 
     try:
-        with st.spinner("Procesando…"):
+        with buttons_area, st.spinner("Procesando…"):
             result = run_stage(stage, files, progress=show_line)
             st.session_state.saved_paths = save_result(result)
         st.session_state.result = result
         st.session_state.result_stage = stage_index
-        log_placeholder.empty()
+        return True
     except StageError as error:
         problems = "\n".join(f"- {p}" for p in error.problems)
         fix = "Corrija el archivo y vuelva a cargarlo." if uploaded_count == 1 else "Corrija los archivos y vuelva a cargarlos."
@@ -365,13 +390,35 @@ if buttons_row.button("Procesar", type="primary", icon=":material/play_arrow:", 
     except Exception as error:
         log_exception(error)
         message_area.error(UNEXPECTED_ERROR_MESSAGE)
+    return False
+
+
+# Fila de botones: Procesar y, cuando hay resultados, las descargas y «Nuevo procesamiento».
+buttons_row = buttons_area.container(horizontal=True)
+
+# Las entradas por fecha traen {fecha: archivo}; las demás, una lista de archivos.
+current_files = (stage_index, tuple(
+    tuple((day, *file_ids([f])) for day, f in loaded.items()) if isinstance(loaded, dict) else file_ids(loaded)
+    for loaded in files.values()
+))
+# Si el proceso se detiene, su log queda en la sección de abajo en lugar del log de carga.
+process_failed = False
+if buttons_row.button("Procesar", type="primary", icon=":material/play_arrow:", disabled=missing_required):
+    if process_files():
+        st.session_state.result_files = current_files
+    else:
+        process_failed = True
+elif st.session_state.result_files != current_files:
+    # Cambió algún archivo después de procesar (por ejemplo, se corrigió el ETY): hay que procesar de nuevo.
+    st.session_state.result = None
+    st.session_state.result_files = None
 
 # --- Resultados ------------------------------------------------------------
 
 
 def show_results(result, saved_paths, buttons_row) -> None:
-    """Muestra los botones de descarga junto a Procesar, el log de ejecución, la tabla de
-    acciones y la ruta de la copia guardada."""
+    """Muestra los botones de descarga junto a Procesar y, en la sección de abajo, el log de
+    ejecución, la tabla de acciones y la ruta de la copia guardada."""
     buttons_row.download_button(
         "Descargar archivo procesado",
         data=result.output_bytes,
@@ -390,21 +437,22 @@ def show_results(result, saved_paths, buttons_row) -> None:
     )
     buttons_row.button("Nuevo procesamiento", icon=":material/restart_alt:", on_click=reset)
 
-    st.success("Procesamiento terminado. Revise el log antes de pasar a la siguiente etapa.")
+    buttons_area.success("Procesamiento terminado. Revise el log antes de pasar a la siguiente etapa.")
 
-    tab_log, tab_actions = st.tabs(["Log de ejecución", "Acciones realizadas"])
-    with tab_log:
-        show_step_log(st.empty(), result.audit.step_lines())
-    with tab_actions:
-        show_actions(result.audit.actions_df())
-
-    output_path, log_path = saved_paths
-    st.caption(f"Copia guardada en: {output_path.parent}")
+    with log_section.container():
+        tab_log, tab_actions = st.tabs(["Log de ejecución", "Acciones realizadas"])
+        with tab_log:
+            show_step_log(st.empty(), result.audit.step_lines())
+        with tab_actions:
+            show_actions(result.audit.actions_df())
+        output_path, log_path = saved_paths
+        st.caption(f"Copia guardada en: {output_path.parent}")
 
 
 result = st.session_state.result
-if (result is None or st.session_state.result_stage != stage_index) and load_log["lines"]:
-    show_load_log()
+if (result is None or st.session_state.result_stage != stage_index) and load_log["lines"] and not process_failed:
+    with log_section.container():
+        show_load_log()
 if result is not None and st.session_state.result_stage == stage_index:
     try:
         show_results(result, st.session_state.saved_paths, buttons_row)

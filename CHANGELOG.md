@@ -4,6 +4,11 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 2: la advertencia del nombre del reporte ETY aparece solo si el nombre no contiene `E01_procesado` (antes, si no terminaba en `_E01_procesado`). La opción de entrada `name_suffix` pasa a ser `name_contains`.
+- El archivo descargado conserva el nombre del archivo cargado y cambia la marca de la etapa anterior por la de la etapa actual en el mismo lugar (`ETY_E01_procesado_v2` → `ETY_E02_procesado_v2`); antes, si la marca no estaba al final, se agregaba otra.
+- Etapa 2: el botón Procesar y, al terminar, los de descarga y «Nuevo procesamiento» quedan justo debajo del campo del reporte ETY.
+- El log en vivo del procesamiento se muestra en la pestaña «Log de ejecución» de la sección de abajo, en lugar de un bloque aparte.
+- Si después de procesar se cambia algún archivo cargado (por ejemplo, se corrige el reporte ETY), los resultados dejan de mostrarse y hay que procesar de nuevo.
 - Etapa 1: después de eliminar duplicados y antes de señalar los comprobantes repetidos, se eliminan los registros sin Programa cuyo Más Info contiene «REN-RENDIMIENTOS», «Pago de ReteICA» o «rendimientos bancarios» (regla LIM-103). Cada uno queda en la hoja Acciones del log.
 - Etapa 2: se identifican los comprobantes del reporte ETY que no están en el informe de pago de su fecha (regla VAL-203). Al cargar el informe, la notificación se pone roja y lista cada comprobante con su VR. BRUTO (hasta 20); al procesar, cada uno queda como Error en su registro del ETY (resaltado en la salida y en Acciones). No detiene el procesamiento.
 - Etapa 2: los informes de pago se conservan por fecha. Si se corrige el reporte ETY y se vuelve a cargar (o se carga otro), las fechas que ya tenían informe lo reutilizan y se vuelven a validar contra el nuevo ETY, sin cargarlos de nuevo; las fechas nuevas piden archivo. Cada informe se muestra con un botón «Quitar» para reemplazarlo. «Nuevo procesamiento» los borra.

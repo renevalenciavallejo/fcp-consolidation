@@ -33,8 +33,8 @@ class InputSpec:
     check_column_order: bool = False
     # Entrada con un archivo por cada fecha distinta de otra entrada: (entrada, columna).
     per_date: tuple[str, str] | None = None
-    # Final esperado del nombre del archivo (por ejemplo «_E01_procesado»). Si no lo tiene, solo se advierte.
-    name_suffix: str | None = None
+    # Texto que debe contener el nombre del archivo (por ejemplo «E01_procesado»). Si no lo tiene, solo se advierte.
+    name_contains: str | None = None
 
 
 def input_specs(stage: ModuleType) -> list[InputSpec]:
@@ -53,7 +53,7 @@ def input_specs(stage: ModuleType) -> list[InputSpec]:
             allow_extra_columns=data.get("allow_extra_columns", False),
             check_column_order=data.get("check_column_order", False),
             per_date=(per_date["input"], per_date["column"]) if per_date else None,
-            name_suffix=data.get("name_suffix"),
+            name_contains=data.get("name_contains"),
         )
         if per_date and per_date["input"] not in [s.key for s in specs]:
             raise ValueError(

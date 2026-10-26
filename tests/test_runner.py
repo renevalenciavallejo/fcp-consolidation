@@ -179,8 +179,11 @@ def test_result_names_do_not_grow_from_stage_to_stage():
     # También si trae el número de copia de output/ o del navegador.
     assert result_file_names(stage_99_fake, ["ETY_sept_E01_procesado_9.xlsx"])[0] == "ETY_sept_E99_procesado.xlsx"
     assert result_file_names(stage_99_fake, ["ETY_sept_E01_procesado (2).xlsx"])[0] == "ETY_sept_E99_procesado.xlsx"
-    # Si el usuario lo guardó con otro nombre, no se toca.
-    assert result_file_names(stage_99_fake, ["ETY_E01_procesado_v2.xlsx"])[0] == "ETY_E01_procesado_v2_E99_procesado.xlsx"
+    # Si la marca no está al final, se cambia en su lugar y se conserva el resto del nombre.
+    assert result_file_names(stage_99_fake, ["ETY_E01_procesado_v2.xlsx"]) == (
+        "ETY_E99_procesado_v2.xlsx", "ETY_E99_log_v2.xlsx"
+    )
+    assert result_file_names(stage_99_fake, ["ETY_e01_PROCESADO revisado (2).xlsx"])[0] == "ETY_E99_procesado revisado (2).xlsx"
 
 
 def test_applied_rules_with_unknown_code_fail():

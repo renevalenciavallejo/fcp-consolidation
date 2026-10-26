@@ -68,9 +68,10 @@ class DateSources:
     data: dict[str, pd.DataFrame]     # Datos de cada entrada de origen, para analizar cada archivo
 
 
-# Sufijo que la herramienta agrega a los archivos procesados (por ejemplo "_E01_procesado"),
-# con el número que se agrega cuando ya existe una copia: "_1" en output/ o " (1)" del navegador.
-PROCESSED_SUFFIX = r"_E\d{2}_procesado(_\d+| \(\d+\))?$"
+# Marca que la herramienta agrega a los archivos procesados (por ejemplo "_E01_procesado").
+PROCESSED_MARK = r"(_E\d{2}_procesado)"
+# Número que se agrega cuando ya existe una copia: "_1" en output/ o " (1)" del navegador.
+COPY_NUMBER = r"(_\d+| \(\d+\))?$"
 
 # Recibe cada línea del log de ejecución apenas se produce.
 ProgressCallback = Callable[[str], None]
@@ -177,33 +178,42 @@ def result_file_names(stage: ModuleType, input_names: list[str]) -> tuple[str, s
     """Nombres del archivo procesado y del log: el nombre del archivo original, sin
     cambios, seguido de la etapa (`ETY_sept.xlsx` -> `ETY_sept_E01_procesado.xlsx`).
 
-    Si el archivo ya viene procesado por otra etapa, se quita ese sufijo para que el
-    nombre no crezca de etapa en etapa (`ETY_sept_E01_procesado` -> `ETY_sept_E02_...`).
+    Si el archivo ya viene procesado por otra etapa, se cambia esa marca por la de esta
+    etapa, en el mismo lugar del nombre, para que no crezca de etapa en etapa
+    (`ETY_sept_E01_procesado` -> `ETY_sept_E02_procesado`; `ETY_E01_procesado_v2` ->
+    `ETY_E02_procesado_v2`). El número de copia que sigue a la marca se quita.
     Con varios archivos no hay un único nombre original y se usa el de la etapa.
     """
     code, stage_name = stage_prefix(stage).split("_", 1)
-    if len(input_names) == 1:
-        base = re.sub(PROCESSED_SUFFIX, "", Path(input_names[0]).stem)
-    else:
-        base = stage_name
-    return f"{base}_{code}_procesado.xlsx", f"{base}_{code}_log.xlsx"
+    if len(input_names) != 1:
+        return f"{stage_name}_{code}_procesado.xlsx", f"{stage_name}_{code}_log.xlsx"
+    stem = Path(input_names[0]).stem
+    # El número de copia solo se quita si va justo después de la marca (`_E01_procesado_1`).
+    stem = re.sub(PROCESSED_MARK + COPY_NUMBER, lambda match: match.group(1), stem, flags=re.IGNORECASE)
+    if not re.search(PROCESSED_MARK, stem, re.IGNORECASE):
+        return f"{stem}_{code}_procesado.xlsx", f"{stem}_{code}_log.xlsx"
+    # Se cambia solo la primera marca. El reemplazo es una función para que una «\» del nombre
+    # no se tome como parte de la expresión regular.
+    output = re.sub(PROCESSED_MARK, lambda _: f"_{code}_procesado", stem, count=1, flags=re.IGNORECASE)
+    log = re.sub(PROCESSED_MARK, lambda _: f"_{code}_log", stem, count=1, flags=re.IGNORECASE)
+    return f"{output}.xlsx", f"{log}.xlsx"
 
 
 def file_name_warnings(spec: InputSpec, files: list[Any]) -> list[str]:
-    """Advertencias por archivos cuyo nombre no termina como se espera (`name_suffix`).
+    """Advertencias por archivos cuyo nombre no contiene el texto esperado (`name_contains`).
 
     Sirve para detectar a tiempo que se cargó un archivo equivocado, por ejemplo el reporte
-    original en lugar del procesado en la etapa anterior. Se acepta el número de copia que
-    agregan output/ («_1») o el navegador («(1)»). No detiene el procesamiento.
+    original en lugar del procesado en la etapa anterior. El texto puede estar en cualquier
+    parte del nombre y no se distinguen mayúsculas. No detiene el procesamiento.
     """
-    if not spec.name_suffix:
+    if not spec.name_contains:
         return []
-    pattern = re.escape(spec.name_suffix) + r"(_\d+| \(\d+\))?$"
+    expected = spec.name_contains.casefold()
     return [
-        f"El nombre de «{file_name(f)}» no termina en «{spec.name_suffix}». "
+        f"El nombre de «{file_name(f)}» no contiene «{spec.name_contains}». "
         f"¿Está seguro de que es el {spec.label[0].lower()}{spec.label[1:]}?"
         for f in files
-        if not re.search(pattern, Path(file_name(f)).stem, re.IGNORECASE)
+        if expected not in Path(file_name(f)).stem.casefold()
     ]
 
 

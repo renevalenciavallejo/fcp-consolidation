@@ -247,15 +247,17 @@ def ety_spec():
     "ETY_sept_E01_procesado_1.xlsx",       # Copia en output/
     "ETY_sept_E01_procesado (2).xlsx",     # Copia del navegador
     "ETY_sept_e01_PROCESADO.xlsx",
+    "ETY_E01_procesado_final.xlsx",        # La marca no tiene que estar al final
+    "E01_procesado ETY sept.xlsx",
 ])
 def test_stage_1_file_name_has_no_warning(name):
     assert file_name_warnings(ety_spec(), [make_xlsx([["x"]], name=name)]) == []
 
 
-@pytest.mark.parametrize("name", ["ETY_sept.xlsx", "ETY_sept_E02_procesado.xlsx", "ETY_E01_procesado_final.xlsx"])
+@pytest.mark.parametrize("name", ["ETY_sept.xlsx", "ETY_sept_E02_procesado.xlsx", "ETY_E01_sept.xlsx"])
 def test_other_file_names_get_a_warning(name):
     assert file_name_warnings(ety_spec(), [make_xlsx([["x"]], name=name)]) == [
-        f"El nombre de «{name}» no termina en «_E01_procesado». "
+        f"El nombre de «{name}» no contiene «E01_procesado». "
         "¿Está seguro de que es el reporte ETY procesado en la Etapa 1?"
     ]
 
@@ -266,7 +268,7 @@ def test_file_name_warning_does_not_stop_processing_and_is_logged():
     result = run(file)
     steps = {step.title: step.details for step in result.audit.steps}
     assert steps["Verificando archivos cargados"][1] == (
-        "✗ Advertencia: El nombre de «ETY_sept.xlsx» no termina en «_E01_procesado». "
+        "✗ Advertencia: El nombre de «ETY_sept.xlsx» no contiene «E01_procesado». "
         "¿Está seguro de que es el reporte ETY procesado en la Etapa 1?"
     )
     assert result.output_file_name == "ETY_sept_E02_procesado.xlsx"
