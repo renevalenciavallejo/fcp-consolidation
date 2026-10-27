@@ -177,3 +177,15 @@ def test_actions_show_file_only_with_several_files():
     table = audit.actions_df()
     assert list(table.columns)[:3] == ["Paso", "Archivo", "Fila"]
     assert table.iloc[0]["Archivo"] == "a.xlsx"
+
+
+def test_actions_show_the_record_as_it_was_read():
+    df = pd.DataFrame({"Codigo": ["007", "8"], "Valor": [1, 2], SOURCE_FILE: ["a.xlsx"] * 2, SOURCE_ROW: [2, 3]})
+    audit = AuditLog(COMMON_RULES)
+    audit.remember_source_rows(df)
+    df.loc[0, "Valor"] = 99   # La etapa cambia la tabla después de leerla
+    audit.step("Paso")
+    audit.finding("a.xlsx", 2, "Valor", WARNING, "LIM-001", "Revisar", 99, "")
+    row = audit.actions_df().iloc[0]
+    assert (row["Codigo"], row["Valor"]) == ("007", 1)
+    assert audit.source_row("a.xlsx", 9) == {}

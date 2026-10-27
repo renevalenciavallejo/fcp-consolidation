@@ -35,6 +35,9 @@ class InputSpec:
     per_date: tuple[str, str] | None = None
     # Texto que debe contener el nombre del archivo (por ejemplo «E01_procesado»). Si no lo tiene, solo se advierte.
     name_contains: str | None = None
+    # Lectura rápida (python-calamine) para archivos de apoyo muy grandes: solo valores, sin la
+    # apariencia de la hoja, así que no sirve para la entrada que da forma al archivo de salida.
+    fast_read: bool = False
 
 
 def input_specs(stage: ModuleType) -> list[InputSpec]:
@@ -54,6 +57,7 @@ def input_specs(stage: ModuleType) -> list[InputSpec]:
             check_column_order=data.get("check_column_order", False),
             per_date=(per_date["input"], per_date["column"]) if per_date else None,
             name_contains=data.get("name_contains"),
+            fast_read=data.get("fast_read", False),
         )
         if per_date and per_date["input"] not in [s.key for s in specs]:
             raise ValueError(

@@ -4,6 +4,9 @@ Las celdas se leen con openpyxl tal como están guardadas en Excel (texto,
 número o fecha), sin dejar que pandas adivine tipos. Así no se pierden ceros a
 la izquierda ni se confunden formatos; la conversión explícita la hacen las
 funciones de core/cleaning.py.
+
+Las entradas con `fast_read` se leen con python-calamine, unas diez veces más
+rápido en archivos grandes (como el AP Voucher), pero sin la apariencia de la hoja.
 """
 
 from dataclasses import dataclass, field
@@ -14,6 +17,7 @@ from typing import Any
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
+from python_calamine import CalamineWorkbook
 
 from core.audit import is_empty
 from core.cleaning import clean_text
@@ -61,7 +65,7 @@ def read_file(file: Any, spec: InputSpec) -> ReadResult:
     """
     name = file_name(file)
     try:
-        workbook = load_workbook(_as_source(file), data_only=True)
+        workbook = _open_workbook(file, spec)
     except Exception:
         return ReadResult(
             name, None, [f"[EST-001] {name}: no se pudo abrir. Verifique que sea un archivo .xlsx válido."],
@@ -70,11 +74,11 @@ def read_file(file: Any, spec: InputSpec) -> ReadResult:
 
     if spec.sheet is None:
         # Sin nombre configurado se usa la primera hoja: el nombre puede variar entre exportaciones.
-        sheet_name = workbook.sheetnames[0]
-    elif spec.sheet in workbook.sheetnames:
+        sheet_name = _sheet_names(workbook)[0]
+    elif spec.sheet in _sheet_names(workbook):
         sheet_name = spec.sheet
     else:
-        sheets = ", ".join(workbook.sheetnames)
+        sheets = ", ".join(_sheet_names(workbook))
         return ReadResult(
             name, None, [f"[EST-002] {name}: no tiene la hoja '{spec.sheet}'. Hojas encontradas: {sheets}."]
         )
@@ -84,9 +88,7 @@ def read_file(file: Any, spec: InputSpec) -> ReadResult:
         workbook.close()
         return ReadResult(name, None, [])
 
-    worksheet = workbook[sheet_name]
-    rows = list(worksheet.iter_rows(min_row=1, min_col=1, values_only=True))
-    workbook.close()
+    rows, worksheet = _sheet_rows(workbook, sheet_name)
 
     header = rows[spec.header_row - 1] if len(rows) >= spec.header_row else ()
     data_rows = _trim_trailing_empty(rows[spec.header_row:])
@@ -136,7 +138,8 @@ def read_file(file: Any, spec: InputSpec) -> ReadResult:
         return ReadResult(name, None, problems)
 
     # La hoja sigue disponible después de cerrar el libro (no se abrió en modo solo lectura).
-    style = capture_style(worksheet, spec.header_row, positions)
+    # Con la lectura rápida no hay hoja de openpyxl ni apariencia que repetir.
+    style = capture_style(worksheet, spec.header_row, positions) if worksheet is not None else None
     columns = list(positions)
     records = []
     for offset, row in enumerate(data_rows):
@@ -216,6 +219,38 @@ def _as_source(file: Any) -> Any:
     if hasattr(file, "getvalue"):
         return BytesIO(file.getvalue())
     return file
+
+
+def _open_workbook(file: Any, spec: InputSpec) -> Any:
+    """Abre el libro con openpyxl o, si la entrada usa lectura rápida, con python-calamine."""
+    if spec.fast_read:
+        return CalamineWorkbook.from_object(_as_source(file))
+    return load_workbook(_as_source(file), data_only=True)
+
+
+def _sheet_names(workbook: Any) -> list[str]:
+    if isinstance(workbook, CalamineWorkbook):
+        return workbook.sheet_names
+    return workbook.sheetnames
+
+
+def _sheet_rows(workbook: Any, sheet_name: str) -> tuple[list[tuple], Any]:
+    """Filas de la hoja desde la A1 y la hoja de openpyxl (None con la lectura rápida).
+
+    python-calamine entrega las celdas vacías como "" (aquí quedan en None, como con
+    openpyxl), los números siempre como decimales (7 -> 7.0) y las fechas sin hora como
+    fecha. Por defecto se salta las filas y columnas vacías del inicio: se le pide que no
+    lo haga para que cada fila conserve su número real en Excel.
+    """
+    if isinstance(workbook, CalamineWorkbook):
+        sheet = workbook.get_sheet_by_name(sheet_name)
+        rows = [tuple(None if value == "" else value for value in row) for row in sheet.to_python(skip_empty_area=False)]
+        workbook.close()
+        return rows, None
+    worksheet = workbook[sheet_name]
+    rows = list(worksheet.iter_rows(min_row=1, min_col=1, values_only=True))
+    workbook.close()
+    return rows, worksheet
 
 
 def _empty_cell(value: Any) -> bool:

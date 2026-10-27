@@ -49,6 +49,9 @@ INPUTS = {
         "header_row": 20,       # Las filas 1 a 19 son el título y los parámetros del reporte
         # El reporte trae muchas otras columnas (algunas con el encabezado repetido): se aceptan.
         "allow_extra_columns": True,
+        # El archivo es muy grande y crece en cada periodo: se lee con la lectura rápida
+        # (python-calamine). Solo se consultan sus valores; no da forma al archivo de salida.
+        "fast_read": True,
         # Columnas que usa la etapa y su tipo.
         "columns": {
             "Comprobante": "code",      # Columna E

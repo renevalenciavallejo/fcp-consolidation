@@ -122,9 +122,11 @@ class AuditLog:
         # Con varios archivos de entrada, las filas del log de ejecución se indican con el
         # nombre del archivo; con uno solo sería repetitivo. Lo define el ejecutor.
         self.multiple_files = False
-        # Registros tal como se leyeron de los archivos, por (archivo, fila). Los guarda el
-        # ejecutor para que la tabla de acciones muestre el registro completo de cada acción.
-        self.source_rows: dict[tuple[str, int], dict] = {}
+        # Registros tal como se leyeron de los archivos. Los guarda el ejecutor para que la
+        # tabla de acciones muestre el registro completo de cada acción: una copia de cada
+        # tabla leída y, por (archivo, fila), en qué tabla y posición está el registro.
+        self._source_frames: list[pd.DataFrame] = []
+        self._source_positions: dict[tuple[str, int], tuple[int, int]] = {}
         self._open_step: Step | None = None
         self._step_start: dict[str, int] = {}
 
@@ -133,11 +135,25 @@ class AuditLog:
             raise ValueError(f"La regla '{rule}' no está declarada en el catálogo de reglas.")
 
     def remember_source_rows(self, df: pd.DataFrame) -> None:
-        """Guarda los registros tal como se leyeron, para mostrarlos en la tabla de acciones."""
-        columns = data_columns(df)
-        for index in df.index:
-            key = (df.at[index, SOURCE_FILE], int(df.at[index, SOURCE_ROW]))
-            self.source_rows[key] = {c: _clean(df.at[index, c]) for c in columns}
+        """Guarda los registros tal como se leyeron, para mostrarlos en la tabla de acciones.
+
+        Se guarda una copia de la tabla (la etapa puede cambiar la original) y cada registro
+        se arma solo cuando una acción lo necesita (source_row): en archivos grandes, como el
+        AP Voucher, armarlos todos de antemano tomaba casi un minuto.
+        """
+        number = len(self._source_frames)
+        self._source_frames.append(df[data_columns(df)].copy())
+        for position, key in enumerate(zip(df[SOURCE_FILE], df[SOURCE_ROW])):
+            self._source_positions[(key[0], int(key[1]))] = (number, position)
+
+    def source_row(self, source_file: str, source_row: int) -> dict:
+        """Registro original de un archivo y fila, tal como se leyó (vacío si no se guardó)."""
+        found = self._source_positions.get((source_file, source_row))
+        if found is None:
+            return {}
+        frame = self._source_frames[found[0]]
+        values = frame.iloc[found[1]]
+        return {c: _clean(values[c]) for c in frame.columns}
 
     def _record(self, item) -> None:
         """Guarda el registro en el orden en que ocurrió, junto con el paso en curso."""
@@ -383,7 +399,7 @@ class AuditLog:
         if isinstance(item, Removal):
             return item.row_data
         if isinstance(item, (Change, Finding)):
-            return self.source_rows.get((item.source_file, item.source_row), {})
+            return self.source_row(item.source_file, item.source_row)
         return {}
 
     def findings_df(self) -> pd.DataFrame:

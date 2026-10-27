@@ -34,7 +34,7 @@ Documento, Nº Sec Doc, Más Info, Dpto, Cd Fnd, Subfideicomiso, Cuenta, Proy, P
 
 Columnas obligatorias: Comprobante (columna E), Estado Cierre (columna K) y Acción (columna BF). Se buscan por su nombre, no por su letra. El reporte trae otras columnas (113 en total), que se aceptan sin validarse; algunas tienen el encabezado repetido (Nombre, Tipo Documento, Identificación, Cuenta) y se conserva la primera.
 
-El AP Voucher solo se consulta en memoria: no hace parte del archivo de salida y nunca se modifica.
+El AP Voucher solo se consulta en memoria: no hace parte del archivo de salida y nunca se modifica. Como es muy grande y crece en cada periodo, se lee con la lectura rápida (solo valores, sin el formato de la hoja).
 
 ## Reglas
 

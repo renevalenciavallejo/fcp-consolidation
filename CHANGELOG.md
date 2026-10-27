@@ -4,6 +4,8 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 3: el AP Voucher se lee con python-calamine (nueva dependencia y opción de entrada `fast_read`). Con el archivo real (21.000 registros), la validación al cargarlo pasa de unos 17 s a 1,6 s. Las demás entradas se siguen leyendo con openpyxl.
+- Procesar es mucho más rápido con archivos grandes: el registro completo de cada acción (hoja Acciones) se arma solo cuando se necesita, en lugar de prepararlo de antemano para todos los registros leídos. Con el AP Voucher real, Procesar en la Etapa 3 pasa de unos 38 s a 1,8 s.
 - Mientras se valida la estructura de un archivo cargado aparece un mensaje de espera debajo de su campo, para que la pantalla no parezca congelada con archivos grandes como el AP Voucher.
 - Etapas 1 y 3: el reporte ETY se valida en su estructura apenas se carga, como en la Etapa 2. Si tiene errores, aparecen debajo de su campo y deshabilitan Procesar; lo que se hizo queda en las pestañas «Log de ejecución» y «Acciones realizadas».
 - Etapa 3: el AP Voucher se valida en su estructura apenas se carga (si tiene errores, aparecen debajo de su campo y deshabilitan Procesar). Los comprobantes cerrados y cancelados se buscan solo al procesar y, al terminar, una notificación de información los lista e indica el color de cada caso. Nueva opción de etapa `RESULT_NOTICE`.

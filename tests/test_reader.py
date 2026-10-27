@@ -1,4 +1,5 @@
 from datetime import datetime
+from io import BytesIO
 
 from core.reader import read_file
 from core.settings import SOURCE_FILE, SOURCE_ROW
@@ -76,7 +77,6 @@ def test_repeated_extra_column_is_allowed_when_extra_columns_are():
 
 
 def test_not_an_excel_file():
-    from io import BytesIO
 
     file = BytesIO(b"esto no es un excel")
     file.name = "malo.xlsx"
@@ -112,3 +112,43 @@ def test_column_order_ignores_allowed_extra_columns():
     spec = InputSpec(**{**SPEC.__dict__, "check_column_order": True, "allow_extra_columns": True})
     file = make_xlsx([["Extra", "Codigo", "Otra", "Valor"], ["x", "1", "y", 1]])
     assert read_file(file, spec).problems == []
+
+
+# --- Lectura rápida (python-calamine) -----------------------------------------
+
+FAST_SPEC = InputSpec(**{**SPEC.__dict__, "header_row": 3, "allow_extra_columns": True, "fast_read": True})
+
+
+def fast_file():
+    """Columna A vacía, dos filas de título, celdas vacías y una columna adicional."""
+    return make_xlsx(
+        [[None, "Codigo", "Valor", "Otra"], [None, "007", 1500, None], [None, None, None, "x"], [None, "8", 2.5, None]],
+        header_row=3,
+    )
+
+
+def test_fast_read_gives_the_same_values_and_rows():
+    normal = read_file(fast_file(), InputSpec(**{**FAST_SPEC.__dict__, "fast_read": False}))
+    fast = read_file(fast_file(), FAST_SPEC)
+    assert fast.problems == []
+    assert list(fast.data[SOURCE_ROW]) == [4, 5, 6]   # Filas reales, aunque la columna A esté vacía
+    assert list(fast.data["Codigo"]) == ["007", None, "8"]
+    assert list(fast.data["Otra"]) == [None, "x", None]   # Las celdas vacías quedan vacías, no ""
+    assert list(fast.data["Valor"].fillna(0)) == list(normal.data["Valor"].fillna(0))
+    assert fast.title_rows == normal.title_rows
+
+
+def test_fast_read_has_no_style():
+    assert read_file(fast_file(), FAST_SPEC).style is None
+
+
+def test_fast_read_reports_structure_problems():
+    file = make_xlsx([["Codigo"], ["1"]], header_row=3)
+    assert any("EST-003" in p and "Valor" in p for p in read_file(file, FAST_SPEC).problems)
+
+
+def test_fast_read_rejects_a_file_that_is_not_excel():
+    broken = BytesIO(b"no es un excel")
+    broken.name = "malo.xlsx"
+    result = read_file(broken, FAST_SPEC)
+    assert not result.opened and "EST-001" in result.problems[0]
