@@ -146,3 +146,42 @@ uv sync                       # Instalar el entorno
 uv run streamlit run app.py   # Abrir la interfaz
 uv run pytest                 # Ejecutar las pruebas
 ```
+
+### Generar el paquete para distribuir
+
+La herramienta se entrega como un archivo `.zip` con la carpeta completa. Se genera con `git archive`, que incluye **solo los archivos guardados en git**: deja fuera `output/`, `tests/cases/`, los `.xlsx` y `.venv/`, así que ningún dato real sale en el paquete. No comprima la carpeta a mano, porque arrastraría esos archivos.
+
+Los comandos son los mismos en Windows (PowerShell) y en macOS (Terminal), desde la carpeta de la herramienta. En el ejemplo, la versión es `0.2.0`; cámbiela por la que corresponda.
+
+1. Verifique que todas las pruebas pasen:
+
+   ```
+   uv run pytest
+   ```
+
+2. Cambie la versión en `pyproject.toml` (línea `version = "0.2.0"`) y, en `CHANGELOG.md`, cambie el título «Sin publicar» por `## 0.2.0`.
+
+3. Guarde los cambios en git:
+
+   ```
+   git add pyproject.toml CHANGELOG.md
+   git commit -m "chore: Release 0.2.0"
+   ```
+
+4. Genere el `.zip` con lo que está guardado en git (`HEAD` es el último commit):
+
+   ```
+   git archive --format=zip --prefix=fcp-consolidation/ -o fcp-consolidation-0.2.0.zip HEAD
+   ```
+
+   Los cambios que no estén en un commit **no entran en el paquete**. Antes de generarlo, verifique con `git status` que no quede nada pendiente (salvo la carpeta `.claude/`, que no hace parte de la herramienta).
+
+   El archivo `fcp-consolidation-0.2.0.zip` queda en la carpeta de la herramienta (git no lo guarda, porque está en `.gitignore`). Al descomprimirlo se crea la carpeta `fcp-consolidation`.
+
+5. Opcional: revise qué archivos contiene el paquete (no debe aparecer ningún `.xlsx` ni la carpeta `output/`):
+
+   ```
+   tar -tf fcp-consolidation-0.2.0.zip
+   ```
+
+Para actualizar, el usuario reemplaza la carpeta por la del `.zip` nuevo, **conservando su carpeta `output/`**, donde quedan las copias de los archivos generados. Al abrir la herramienta, uv instala solo lo que haya cambiado.

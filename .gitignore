@@ -18,3 +18,6 @@ errores.log
 # Archivos temporales de Excel abiertos (~$archivo.xlsx)
 ~$*
 .DS_Store
+
+# Paquetes generados para distribuir (ver README)
+*.zip
