@@ -112,7 +112,7 @@ Para cerrar la herramienta, cierre la ventana negra (consola) que se abrió al i
 
 ### Dónde quedan los archivos
 
-Además de la descarga, la herramienta guarda una copia de cada resultado en la carpeta **`output`** dentro de la carpeta de la herramienta. Nunca reemplaza un archivo anterior.
+Los archivos procesados y los logs quedan donde su navegador guarda las descargas (normalmente, la carpeta **Descargas**). La herramienta no guarda otra copia: descárguelos antes de presionar «Nuevo procesamiento» o de cerrarla. Si pierde alguno, cargue los mismos archivos y procese de nuevo: el resultado es el mismo.
 
 ### Cómo leer el log
 
@@ -184,4 +184,4 @@ Los comandos son los mismos en Windows (PowerShell) y en macOS (Terminal), desde
    tar -tf fcp-consolidation-0.2.0.zip
    ```
 
-Para actualizar, el usuario reemplaza la carpeta por la del `.zip` nuevo, **conservando su carpeta `output/`**, donde quedan las copias de los archivos generados. Al abrir la herramienta, uv instala solo lo que haya cambiado.
+Para actualizar, el usuario reemplaza la carpeta por la del `.zip` nuevo. Al abrir la herramienta, uv instala solo lo que haya cambiado.

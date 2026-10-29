@@ -77,7 +77,7 @@ Tres capas, con dependencias en un solo sentido: `interfaces → core/stages`.
    - `app.py` (Streamlit): interfaz principal del usuario.
    - `cli.py` (línea de comandos, no interactiva): para pruebas y uso avanzado.
    - Ninguna interfaz contiene lógica de negocio. Solo reciben archivos, llaman al ejecutor y muestran o entregan resultados.
-2. **Ejecutor (`core/runner.py`)**: `run_stage(stage, files, progress)` orquesta el flujo estándar de cualquier etapa (sección 5) y `save_result` guarda la copia en `output/`.
+2. **Ejecutor (`core/runner.py`)**: `run_stage(stage, files, progress)` orquesta el flujo estándar de cualquier etapa (sección 5) y `save_result` guarda los resultados en `output/` (solo lo usa la CLI).
 3. **Etapas (`stages/stage_NN_<name>/`)**: solo contienen las reglas de negocio de esa etapa y su configuración.
 
 **El núcleo trabaja en memoria.** El ejecutor recibe archivos (`BytesIO`, archivos cargados en Streamlit o rutas) y devuelve un `StageResult` con el archivo de salida y el log como `bytes`. Cada interfaz decide qué hacer con ellos. Los problemas de estructura se lanzan como `StageError` (con la lista `problems` en español); cualquier otra excepción es un error técnico (sección 8.4).
@@ -104,7 +104,7 @@ fcp-consolidation/
 ├── stages/
 │   ├── __init__.py            # Registro de etapas disponibles (STAGES)
 │   └── stage_NN_<name>/       # __init__.py, config.py, process.py, ESPECIFICACION.md
-├── output/                    # Copia local de los archivos generados (no se versiona)
+├── output/                    # Archivos generados por la CLI (no se versiona)
 └── tests/
     ├── helpers.py             # make_xlsx(): crea archivos de prueba en memoria
     ├── stage_99_fake/         # Etapa ficticia para probar el núcleo
@@ -219,7 +219,7 @@ El ejecutor siempre sigue este orden:
    5. Validaciones de negocio (generan hallazgos).
    6. Transformaciones (cálculos, columnas nuevas, reestructuración).
 5. **Construcción de resultados:** archivo de salida y archivo de log, en memoria. Se quitan las columnas internas del archivo de salida.
-6. **Entrega:** la interfaz muestra el resumen, ofrece la descarga y guarda una copia en `output/`.
+6. **Entrega:** la interfaz muestra el resumen y ofrece la descarga (no guarda copia); la CLI guarda los archivos en `output/`.
 
 ## 6. Configuración
 
@@ -281,8 +281,8 @@ Cada regla tiene un código único que aparece en el log, para poder rastrear qu
 ### 8.1 Entrega y nombres
 
 - En Streamlit, el usuario descarga ambos archivos con botones de descarga.
-- Además, se guarda automáticamente una copia en la carpeta `output/` de la aplicación.
-- Nunca se sobrescribe un archivo existente (`save_result` agrega `_1`, `_2`, …).
+- La interfaz **no guarda copia**: los archivos quedan solo donde el navegador guarda las descargas. Si se pierden, se generan de nuevo procesando los mismos archivos (el proceso es repetible y no cambia los originales). No hay auditoría que exija conservar cada procesamiento.
+- La CLI guarda los resultados en la carpeta `output/` de la aplicación, su única forma de entrega. Nunca sobrescribe un archivo existente (`save_result` agrega `_1`, `_2`, …).
 - Nombres:
   - Salida: `<nombre del archivo original>_E<NN>_procesado.xlsx` (por ejemplo `ETY_septiembre_E01_procesado.xlsx`).
   - Log: `<nombre del archivo original>_E<NN>_log.xlsx`.
@@ -326,7 +326,7 @@ Flujo:
 3. **Un cargador de archivos por cada entrada declarada**, con su etiqueta. Solo acepta `.xlsx` y permite varios archivos cuando la entrada lo indica. En una entrada por fecha (`per_date`), al cargar el archivo de origen se valida su estructura (los errores se muestran de inmediato) y aparece un cargador por fecha; Cada archivo de una fecha se valida y analiza apenas se carga (`analyze_date_file`): debajo de su cargador aparece la información calculada, en verde (`st.success`) o en rojo (`st.error`) si la etapa encontró diferencias, o el error (`st.error`). Lo que se hace al cargar (validación del archivo de origen, con `load_date_sources(..., audit)`, y análisis de cada archivo) se muestra debajo de los campos de carga en las pestañas «Log de ejecución» y «Acciones realizadas», que se reemplazan por los resultados al procesar. Los archivos por fecha se guardan en `st.session_state.saved_reports` (por etapa, entrada y fecha) y no en el cargador, porque Streamlit borra el contenido de un cargador que deja de mostrarse: al volver a cargar el archivo de origen, las fechas que siguen en él conservan su archivo y se vuelven a analizar. Un archivo guardado se muestra con su nombre y un botón «Quitar» (para reemplazarlo); «Nuevo procesamiento» los borra. Procesar se habilita cuando todas las fechas obligatorias tienen archivo y ninguno tiene errores. En una etapa con entradas por fecha, la fila de botones (Procesar, descargas, «Nuevo procesamiento») y sus mensajes van justo debajo del cargador de la primera entrada (el ETY), no al final. Las demás entradas (las que no son por fecha ni su origen) también se validan apenas se cargan, solo en su estructura (`core.runner.validate_input`, guardado en `st.session_state.validation_cache`): si tienen errores, aparecen debajo de su cargador y deshabilitan Procesar (si pasan, no se muestra nada), y la lectura y validación quedan en el log de carga. Las reglas de la etapa se aplican solo al procesar. Si el nombre de un archivo no contiene el texto esperado (`name_contains`), aparece una advertencia (`st.warning`) debajo de su cargador, sin bloquear Procesar.
 4. **Botón "Procesar"**, deshabilitado hasta que estén cargadas todas las entradas obligatorias (y sin errores de estructura). Cuando hay resultados, a su lado aparecen los botones de descarga y "Nuevo procesamiento". Los mensajes de éxito o error van justo debajo de esta fila.
 5. **Log de ejecución en vivo:** cada paso y su resultado aparecen a medida que avanzan, en la pestaña «Log de ejecución» de la sección de abajo (`log_section`, la misma del log de carga y de los resultados), no en un bloque aparte. Si el proceso se detiene, el log queda en pantalla y muestra en qué paso falló.
-6. **Resultados:** pestañas «Log de ejecución» y «Acciones realizadas» (una sola tabla, en orden cronológico) y ruta de la copia en `output/`. Si la etapa declara `RESULT_NOTICE(audit) -> list[str]` (en `StageResult.notice`), debajo del mensaje de éxito aparece una notificación de información (`st.info`) con esas líneas (las que empiezan con dos espacios van dentro de la anterior); la CLI las imprime. No se muestran métricas. Si después de procesar cambia algún archivo cargado (`st.session_state.result_files`), los resultados dejan de mostrarse y hay que procesar de nuevo.
+6. **Resultados:** pestañas «Log de ejecución» y «Acciones realizadas» (una sola tabla, en orden cronológico), sin copia en `output/`. Si la etapa declara `RESULT_NOTICE(audit) -> list[str]` (en `StageResult.notice`), debajo del mensaje de éxito aparece una notificación de información (`st.info`) con esas líneas (las que empiezan con dos espacios van dentro de la anterior); la CLI las imprime. No se muestran métricas. Si después de procesar cambia algún archivo cargado (`st.session_state.result_files`), los resultados dejan de mostrarse y hay que procesar de nuevo.
 7. **Botón "Nuevo procesamiento"** (junto a Procesar) para limpiar la pantalla.
 
 Reglas:

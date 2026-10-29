@@ -18,7 +18,6 @@ from core.runner import (
     file_name_warnings,
     load_date_sources,
     run_stage,
-    save_result,
     validate_input,
 )
 from core.settings import APP_NAME, APP_VERSION, DOWNLOAD_BUTTON_COLOR, DOWNLOAD_BUTTON_HOVER_COLOR
@@ -48,7 +47,6 @@ st.html(f"""
 
 # Estado que sobrevive entre recargas de la página (por ejemplo, al descargar un archivo).
 st.session_state.setdefault("result", None)
-st.session_state.setdefault("saved_paths", None)
 st.session_state.setdefault("result_stage", None)
 # Archivos con los que se obtuvo el resultado: si el usuario cambia alguno, los resultados
 # dejan de mostrarse para que no descargue un archivo que ya no corresponde.
@@ -71,7 +69,6 @@ class SavedFile:
 def reset() -> None:
     """Limpia los resultados y los archivos cargados para empezar de nuevo."""
     st.session_state.result = None
-    st.session_state.saved_paths = None
     st.session_state.result_stage = None
     st.session_state.result_files = None
     st.session_state.uploader_version += 1
@@ -429,8 +426,9 @@ def process_files() -> bool:
 
     try:
         with buttons_area, st.spinner("Procesando…"):
+            # No se guarda una copia en output/: el usuario descarga los archivos y, si los
+            # pierde, se generan de nuevo procesando los mismos archivos.
             result = run_stage(stage, files, progress=show_line)
-            st.session_state.saved_paths = save_result(result)
         st.session_state.result = result
         st.session_state.result_stage = stage_index
         return True
@@ -467,9 +465,9 @@ elif st.session_state.result_files != current_files:
 # --- Resultados ------------------------------------------------------------
 
 
-def show_results(result, saved_paths, buttons_row) -> None:
+def show_results(result, buttons_row) -> None:
     """Muestra los botones de descarga junto a Procesar y, en la sección de abajo, el log de
-    ejecución, la tabla de acciones y la ruta de la copia guardada."""
+    ejecución y la tabla de acciones."""
     buttons_row.download_button(
         "Descargar archivo procesado",
         data=result.output_bytes,
@@ -500,8 +498,6 @@ def show_results(result, saved_paths, buttons_row) -> None:
             show_step_log(st.empty(), result.audit.step_lines())
         with tab_actions:
             show_actions(result.audit.actions_df())
-        output_path, log_path = saved_paths
-        st.caption(f"Copia guardada en: {output_path.parent}")
 
 
 result = st.session_state.result
@@ -510,7 +506,7 @@ if (result is None or st.session_state.result_stage != stage_index) and load_log
         show_load_log()
 if result is not None and st.session_state.result_stage == stage_index:
     try:
-        show_results(result, st.session_state.saved_paths, buttons_row)
+        show_results(result, buttons_row)
     except Exception as error:
         # Nunca mostrar un traceback: el detalle queda en errores.log.
         log_exception(error)
