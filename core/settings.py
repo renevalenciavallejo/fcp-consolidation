@@ -41,6 +41,10 @@ SEVERITY_FILLS = {
 DOWNLOAD_BUTTON_COLOR = "#2E7D32"
 DOWNLOAD_BUTTON_HOVER_COLOR = "#1B5E20"   # Más oscuro al pasar el mouse
 
+# Tema con el que abre la interfaz la primera vez en cada navegador; el usuario puede
+# cambiarlo en el menú de la aplicación. Valores de Streamlit: "System", "Light" o "Dark".
+DEFAULT_THEME = "Dark"
+
 # Formatos de Excel para el archivo de salida.
 DATE_FORMAT_EXCEL = "dd/mm/yyyy"
 NUMBER_FORMAT_EXCEL = "#,##0.00"

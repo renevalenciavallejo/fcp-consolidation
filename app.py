@@ -20,7 +20,7 @@ from core.runner import (
     run_stage,
     validate_input,
 )
-from core.settings import APP_NAME, APP_VERSION, DOWNLOAD_BUTTON_COLOR, DOWNLOAD_BUTTON_HOVER_COLOR
+from core.settings import APP_NAME, APP_VERSION, DEFAULT_THEME, DOWNLOAD_BUTTON_COLOR, DOWNLOAD_BUTTON_HOVER_COLOR
 from core.stage import applied_rules, date_label, input_specs, stage_rules
 from stages import STAGES
 
@@ -94,6 +94,23 @@ stage_index = st.sidebar.radio(
     on_change=reset,
 )
 stage = STAGES[stage_index]
+
+# Streamlit no permite elegir el tema inicial sin quitar el selector de tema: con [theme] en
+# config.toml desaparece y con [theme.light] y [theme.dark] sigue el tema del sistema. Por eso,
+# la primera vez que se abre en un navegador se guarda el tema oscuro donde Streamlit guarda la
+# elección del usuario y se recarga. La marca evita repetirlo, para respetar lo que el usuario
+# elija después. Si una versión futura de Streamlit cambia esa llave, solo se pierde el
+# tema inicial: la aplicación sigue funcionando. Va al final de la barra lateral porque un
+# elemento con un script ocupa un espacio vacío, que en el área principal correría la página.
+st.sidebar.html(f"""
+<script>
+if (!localStorage.getItem("fcp_default_theme_applied")) {{
+    localStorage.setItem("fcp_default_theme_applied", "1");
+    localStorage.setItem(`stActiveTheme-${{location.pathname}}-v2`, JSON.stringify("{DEFAULT_THEME}"));
+    location.reload();
+}}
+</script>
+""", unsafe_allow_javascript=True)
 
 # --- Etapa y carga de archivos ---------------------------------------------
 

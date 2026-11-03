@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- La interfaz abre en tema oscuro la primera vez en cada navegador. El usuario puede cambiarlo en el menú de la aplicación (⋮) y su elección se conserva.
 - La eliminación de los registros sin Programa cuyo Más Info contiene «REN-RENDIMIENTOS», «Pago de ReteICA», «rendimientos bancarios», «RETEICA», «Retefuente» o «Estampillas» pasa de la Etapa 1 (LIM-103) a la Etapa 2 (LIM-202), y se aplica al procesar, después de conciliar: los informes de pago de Tesorería ahora traen esos pagos y, si se eliminaban antes, los totales no coincidían. La Etapa 1 conserva esos registros sin marcarlos.
 - La interfaz ya no guarda una copia de cada resultado en la carpeta `output/`: los archivos se descargan con los botones. La línea de comandos sigue guardándolos en `output/`.
 - Etapa 3: el AP Voucher se lee con python-calamine (nueva dependencia y opción de entrada `fast_read`). Con el archivo real (21.000 registros), la validación al cargarlo pasa de unos 17 s a 1,6 s. Las demás entradas se siguen leyendo con openpyxl.
