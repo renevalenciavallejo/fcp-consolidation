@@ -9,7 +9,8 @@ DESCRIPTION = (
     "de pago de Tesorería de cada fecha de pago del reporte. De cada informe toma los pagos con "
     "UN AP656, verifica que su F Ejec sea la fecha del campo donde se cargó, deja un registro por "
     "Comprobante, informa el total de Impt Bruto y lo compara con el total de VR. BRUTO del reporte "
-    "ETY de la misma fecha."
+    "ETY de la misma fecha. Después de conciliar, elimina del reporte ETY los registros sin Programa "
+    "de rendimientos, retenciones y estampillas."
 )
 INPUTS = config.INPUTS
 RULES = config.RULES

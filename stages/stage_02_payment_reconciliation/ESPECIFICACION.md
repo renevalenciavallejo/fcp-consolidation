@@ -109,13 +109,25 @@ Cada comprobante que falta queda como hallazgo **Error** en su registro del ETY:
 
 Al cargar el informe, si falta algún comprobante, la sección debajo de su campo se pone **roja** (aunque los totales sean iguales) y lista cada comprobante con su VR. BRUTO («00157395: $ 894.518,06»), hasta 20; si son más, se indica cuántos más hay y todos están en «Acciones realizadas». Si los totales tampoco son iguales, el mensaje empieza por la diferencia (paso 6); si solo faltan comprobantes, empieza por «N comprobantes del reporte ETY no están en el informe».
 
+### Paso 8 – Eliminar los registros sin Programa de rendimientos, retenciones y estampillas (implementado)
+
+| Código | Regla |
+| --- | --- |
+| LIM-202 | Se eliminan del reporte ETY los registros que no tienen valor en **Programa** (columna Y) y cuyo **Más Info** (columna R) contiene alguno de estos textos: «REN-RENDIMIENTOS», «Pago de ReteICA», «rendimientos bancarios», «RETEICA», «Retefuente» o «Estampillas». |
+
+- Se aplica **al presionar Procesar**, después de conciliar (pasos 6 y 7): los informes de pago también traen estos pagos, así que se comparan con ellos y luego se quitan. Al cargar un informe no se elimina nada.
+- Antes se eliminaban en la Etapa 1 (regla LIM-103); se movieron aquí porque los informes de pago empezaron a incluir esos pagos.
+- El texto se busca dentro de la celda (puede tener más contenido antes o después), sin tener en cuenta mayúsculas, tildes ni espacios sobrantes. Si contiene varios, el motivo indica el primero de la lista.
+- Una celda de Programa con solo espacios cuenta como vacía. Si el registro tiene Programa, se conserva aunque Más Info contenga alguno de los textos.
+- Cada fila eliminada queda en la hoja *Acciones* con el motivo «Sin Programa y Más Info con «<texto encontrado>»».
+
 ### Pasos siguientes (por especificar)
 
 - Reglas de conciliación de pagos.
 
 ## Archivo de salida
 
-Por ahora, los mismos registros del reporte ETY, con la misma apariencia. El nombre sale del reporte ETY (no de los informes): es el mismo nombre con `E01_procesado` cambiado por `E02_procesado` en su lugar (`ETY_sept_E01_procesado.xlsx` → `ETY_sept_E02_procesado.xlsx`; `ETY_E01_procesado_v2.xlsx` → `ETY_E02_procesado_v2.xlsx`); el log, con `E02_log`. Si el nombre no contiene `E01_procesado`, se agrega `_E02_procesado` al final.
+Los registros del reporte ETY, con la misma apariencia, sin los registros sin Programa de rendimientos, retenciones y estampillas (LIM-202). El nombre sale del reporte ETY (no de los informes): es el mismo nombre con `E01_procesado` cambiado por `E02_procesado` en su lugar (`ETY_sept_E01_procesado.xlsx` → `ETY_sept_E02_procesado.xlsx`; `ETY_E01_procesado_v2.xlsx` → `ETY_E02_procesado_v2.xlsx`); el log, con `E02_log`. Si el nombre no contiene `E01_procesado`, se agrega `_E02_procesado` al final.
 
 - La columna **Diferencia** se lee con el valor que Excel guardó al abrir el archivo de la Etapa 1. Si ese archivo se carga sin haberlo abierto y guardado en Excel, la columna llega vacía (la fórmula todavía no tiene valor calculado).
 

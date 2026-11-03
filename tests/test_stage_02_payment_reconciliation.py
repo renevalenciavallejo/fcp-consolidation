@@ -19,7 +19,7 @@ from core.stage import input_specs, stage_rules
 from core.stage import applied_rules
 from stages import STAGES, stage_01_ety_cleaning, stage_02_payment_reconciliation
 from tests.helpers import make_xlsx
-from tests.test_stage_01_ety_cleaning import COLUMNS, OUTPUT_COLUMNS, ROW, distinct, ety_file
+from tests.test_stage_01_ety_cleaning import COLUMNS, OUTPUT_COLUMNS, ROW, distinct, ety_file, with_voucher
 
 
 def stage_1_output(rows=distinct(ROW, ROW)):
@@ -119,6 +119,7 @@ def test_applied_rules():
     assert codes == [
         "EST-007", "EST-001", "EST-002", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",
         "LIM-201", "VAL-201", "TIP-003", "TIP-005", "DUP-201", "TRA-201", "VAL-202", "VAL-203",
+        "LIM-202",
     ]
 
 
@@ -542,3 +543,60 @@ def test_missing_vouchers_are_flagged_in_the_output_but_do_not_stop_processing()
         "✗ [VAL-203] tesoreria_28.xlsx (28/09/2026): 1 comprobante del reporte ETY no está en el informe"
     ]
     assert result.summary.rows_output == 2
+
+
+# --- Registros sin Programa, después de conciliar (LIM-202) -----------------------------------
+
+NO_PROGRAM = "Eliminando los registros sin Programa por su Más Info"
+
+
+def no_program_row(voucher, more_info, program=None):
+    """Registro del ETY sin Programa (por ejemplo, un pago de ReteICA)."""
+    return with_voucher(voucher, Programa=program, **{"Más Info": more_info})
+
+
+def test_rows_without_program_are_reconciled_and_then_removed():
+    rows = (
+        with_voucher("00000101"),
+        no_program_row("00000102", "REN-RENDIMIENTOS SEPTIEMBRE"),
+        no_program_row("00000103", "pago de reteica 2026", program=" "),   # Solo espacios = vacío
+        no_program_row("00000104", "Traslado de  Rendimientos Bancarios"),
+        no_program_row("00000105", "Descuento ReteICA Bogotá"),
+        no_program_row("00000106", "RETEFUENTE OCTUBRE"),
+        no_program_row("00000107", "Pago estampillas"),
+        no_program_row("00000108", "DS_PRUEBA"),                            # Más Info sin los textos
+        no_program_row("00000109", "Pago de ReteICA", program="0002"),      # Con Programa
+    )
+    # El informe trae todos los pagos, también los de ReteICA, Retefuente, etc.
+    payments = [payment(voucher=f"{n:08d}", gross=1000000) for n in range(101, 110)]
+    result = run(stage_1_output(rows), treasury={PAYMENT_DAY: treasury_report(payments=payments)})
+    # La conciliación se hace con todos los registros del ETY...
+    assert steps_of(result)[COMPARE] == [
+        "✓ tesoreria_28.xlsx (28/09/2026): $ 9.000.000,00, igual al VR. BRUTO del reporte ETY"
+    ]
+    assert [f for f in result.audit.findings if f.rule == "VAL-203"] == []
+    # ...y después se eliminan los que no tienen Programa.
+    removed = [(r.source_row, r.reason) for r in result.audit.removals if r.rule == "LIM-202"]
+    assert removed == [
+        (3, "Sin Programa y Más Info con «REN-RENDIMIENTOS»"),
+        (4, "Sin Programa y Más Info con «Pago de ReteICA»"),
+        (5, "Sin Programa y Más Info con «rendimientos bancarios»"),
+        (6, "Sin Programa y Más Info con «RETEICA»"),
+        (7, "Sin Programa y Más Info con «Retefuente»"),
+        (8, "Sin Programa y Más Info con «Estampillas»"),
+    ]
+    titles = [step.title for step in result.audit.steps]
+    assert titles.index(NO_PROGRAM) == titles.index(MISSING) + 1
+    sheet = load_workbook(BytesIO(result.output_bytes)).active
+    vouchers = [row[OUTPUT_COLUMNS.index("Comprobante")] for row in sheet.iter_rows(min_row=2, values_only=True)]
+    assert vouchers == ["00000101", "00000108", "00000109"]
+
+
+def test_rows_without_program_are_not_removed_when_the_report_is_loaded():
+    # Al cargar el informe solo se concilia; la eliminación se hace al procesar.
+    rows = (with_voucher("00000101"), no_program_row("00000102", "Pago de ReteICA"))
+    payments = [payment(voucher="00000101", gross=1000000), payment(voucher="00000102", gross=1000000)]
+    analysis = analyze(treasury_report(payments=payments), ety=ety_data(rows))
+    assert analysis.ok
+    assert NO_PROGRAM not in steps_of(analysis)
+    assert [r for r in analysis.audit.removals if r.rule == "LIM-202"] == []

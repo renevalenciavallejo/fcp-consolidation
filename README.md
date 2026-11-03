@@ -38,8 +38,7 @@ Se carga **un** reporte ETY de pagos (24 columnas, encabezados en la fila 4). La
 6. Entre los registros con Diferencia 0, elimina:
    - los comprobantes que tienen VR. BRUTO en 0 en todos sus registros;
    - los duplicados del mismo Comprobante que son iguales o que solo difieren en Dpto, Cd Fnd o Producto (se conserva el primero). Si difieren en Subfideicomiso, Cuenta, Programa u otra columna, se conservan todos.
-7. Elimina los registros sin Programa cuyo Más Info contiene «REN-RENDIMIENTOS», «Pago de ReteICA», «rendimientos bancarios», «RETEICA», «Retefuente» o «Estampillas».
-8. Señala en amarillo los comprobantes que siguen repetidos, para revisarlos.
+7. Señala en amarillo los comprobantes que siguen repetidos, para revisarlos.
 
 ### Etapa 2 – Conciliación de pagos
 
@@ -53,7 +52,7 @@ Cada informe se revisa apenas se carga, y debajo de su campo aparece el resultad
 4. Se calcula el total de Impt Bruto y se compara con el total de VR. BRUTO del reporte ETY de esa fecha. Si son iguales, el resultado aparece en **verde**; si no, en **rojo**, con la diferencia.
 5. Se buscan los comprobantes del reporte ETY de esa fecha que no están en el informe. Si falta alguno, el resultado aparece en rojo y los lista.
 
-Una diferencia en los totales o un comprobante que falta no impiden procesar. Al procesar, cada comprobante que falta queda señalado como Error (en rojo) en el archivo procesado. Los informes de Tesorería no se modifican ni hacen parte del archivo procesado.
+Una diferencia en los totales o un comprobante que falta no impiden procesar. Al procesar, cada comprobante que falta queda señalado como Error (en rojo) en el archivo procesado. Después de conciliar, se eliminan del reporte ETY los registros sin Programa cuyo Más Info contiene «REN-RENDIMIENTOS», «Pago de ReteICA», «rendimientos bancarios», «RETEICA», «Retefuente» o «Estampillas» (los informes de pago también traen esos pagos, por eso se eliminan hasta aquí). Los informes de Tesorería no se modifican ni hacen parte del archivo procesado.
 
 Si corrige el reporte ETY y lo vuelve a cargar, los informes de las fechas que siguen en el reporte se conservan y se revisan de nuevo, sin cargarlos otra vez.
 

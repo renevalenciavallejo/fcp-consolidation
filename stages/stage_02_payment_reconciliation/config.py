@@ -86,6 +86,23 @@ ETY_GROSS_COLUMN = "VR. BRUTO"
 # fecha debe estar en el informe de pago de esa fecha (columna Comprobante del informe).
 ETY_VOUCHER_COLUMN = "Comprobante"
 
+# Al final, después de conciliar, se eliminan del reporte ETY los registros sin valor en
+# PROGRAM_COLUMN (columna Y) cuyo MORE_INFO_COLUMN (columna R) contiene alguno de estos
+# textos: pagos de rendimientos, retenciones y estampillas. Van después de conciliar porque
+# los informes de pago también traen esos pagos. Se busca el texto dentro de la celda, sin
+# tener en cuenta mayúsculas, tildes ni espacios sobrantes. Si contiene varios, el motivo
+# indica el primero de esta lista.
+PROGRAM_COLUMN = "Programa"
+MORE_INFO_COLUMN = "Más Info"
+NO_PROGRAM_REMOVAL_TEXTS = [
+    "REN-RENDIMIENTOS",
+    "Pago de ReteICA",
+    "rendimientos bancarios",
+    "RETEICA",
+    "Retefuente",
+    "Estampillas",
+]
+
 # Cuántos comprobantes faltantes se listan en la notificación debajo del campo del informe;
 # los demás se cuentan y quedan todos en la tabla de acciones.
 MAX_VOUCHERS_IN_NOTICE = 20
@@ -113,6 +130,11 @@ RULES = {
         "Identificar los comprobantes del reporte ETY que no están en el informe de pago de su "
         "FECHA DE PAGO (se señalan como Error; no detiene el proceso)"
     ),
+    "LIM-202": (
+        "Después de conciliar, eliminar del reporte ETY los registros sin Programa cuyo Más Info "
+        "contiene «REN-RENDIMIENTOS», «Pago de ReteICA», «rendimientos bancarios», «RETEICA», "
+        "«Retefuente» o «Estampillas»"
+    ),
 }
 
 # Todas las reglas que aplica la etapa, en el orden en que se aplican. Es la lista que el
@@ -122,5 +144,5 @@ APPLIED_RULES = [
     "EST-007", "EST-001", "EST-002", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",  # Estructura
     "LIM-201", "VAL-201",
     "TIP-003", "TIP-005",   # Comprobante como código e Impt Bruto como moneda
-    "DUP-201", "TRA-201", "VAL-202", "VAL-203",
+    "DUP-201", "TRA-201", "VAL-202", "VAL-203", "LIM-202",
 ]

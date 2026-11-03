@@ -25,8 +25,11 @@ from stages.stage_02_payment_reconciliation.config import (
     INPUTS,
     MAX_ROWS_IN_MESSAGE,
     MAX_VOUCHERS_IN_NOTICE,
+    MORE_INFO_COLUMN,
+    NO_PROGRAM_REMOVAL_TEXTS,
     PAYMENT_GROSS_COLUMN,
     PAYMENT_VOUCHER_COLUMN,
+    PROGRAM_COLUMN,
 )
 
 # Tipo de cada columna obligatoria del informe de pago, según config.INPUTS.
@@ -46,7 +49,9 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     audit.step(MISSING_STEP)
     for name, day in loaded.itertuples(index=False):
         find_missing_vouchers(name, day, payments, inputs["ety_processed"], audit)
-    return inputs["ety_processed"]
+    # Después de conciliar: los informes de pago también traen estos pagos.
+    audit.step(f"Eliminando los registros sin {PROGRAM_COLUMN} por su {MORE_INFO_COLUMN}")
+    return remove_no_program_rows(inputs["ety_processed"], audit)
 
 
 # Pasos del log de ejecución de las reglas VAL-202 y VAL-203.
@@ -169,6 +174,28 @@ def find_missing_vouchers(
             "Verifique el pago con Tesorería o corrija el reporte ETY",
         )
     return missing
+
+
+def remove_no_program_rows(df: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
+    """Elimina del reporte ETY los registros sin Programa (columna Y) cuyo Más Info (columna R)
+    contiene alguno de los textos de NO_PROGRAM_REMOVAL_TEXTS. Regla LIM-202.
+
+    El texto se busca dentro de la celda, sin tener en cuenta mayúsculas, tildes ni
+    espacios sobrantes. Cada eliminada queda en la hoja Acciones con el texto encontrado.
+    """
+    targets = [(text, comparable_text(text)) for text in NO_PROGRAM_REMOVAL_TEXTS]
+    to_remove = pd.Series(False, index=df.index)
+    reasons = pd.Series("", index=df.index, dtype=object)
+    for index, row in df.iterrows():
+        # comparable_text deja vacía una celda con solo espacios: cuenta como sin Programa.
+        if comparable_text(row[PROGRAM_COLUMN]):
+            continue
+        more_info = comparable_text(row[MORE_INFO_COLUMN])
+        found = next((text for text, target in targets if target in more_info), None)
+        if found:
+            to_remove.at[index] = True
+            reasons.at[index] = f"Sin {PROGRAM_COLUMN} y {MORE_INFO_COLUMN} con «{found}»"
+    return audit.remove_rows(df, to_remove, "LIM-202", reasons)
 
 
 def ety_gross_by_day(ety: pd.DataFrame) -> dict[date, float]:
