@@ -413,8 +413,11 @@ def process_files() -> bool:
     # Log en vivo, en la pestaña «Log de ejecución» de la sección de abajo (reemplaza el log de
     # carga). Al terminar, los resultados ocupan su lugar; si el proceso se detiene, queda en
     # pantalla para ver en qué paso falló.
+    # Solo las pestañas, sin un aviso encima: los resultados reemplazan esta sección en la misma
+    # ejecución y Streamlit la reemplaza elemento por elemento, por posición. Si el log en vivo
+    # tuviera un elemento más que los resultados, sus pestañas quedarían debajo de las de los
+    # resultados (el log se vería dos veces). El aviso «Procesando…» ya lo da el spinner.
     with log_section.container():
-        st.caption("Procesando… El log completo y las acciones aparecen al terminar.")
         tab_log, tab_actions = st.tabs(["Log de ejecución", "Acciones realizadas"])
         log_placeholder = tab_log.empty()
         tab_actions.write("Las acciones aparecen al terminar el procesamiento.")
