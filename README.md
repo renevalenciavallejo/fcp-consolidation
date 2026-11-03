@@ -38,7 +38,7 @@ Se carga **un** reporte ETY de pagos (24 columnas, encabezados en la fila 4). La
 6. Entre los registros con Diferencia 0, elimina:
    - los comprobantes que tienen VR. BRUTO en 0 en todos sus registros;
    - los duplicados del mismo Comprobante que son iguales o que solo difieren en Dpto, Cd Fnd o Producto (se conserva el primero). Si difieren en Subfideicomiso, Cuenta, Programa u otra columna, se conservan todos.
-7. Elimina los registros sin Programa cuyo Más Info contiene «REN-RENDIMIENTOS», «Pago de ReteICA» o «rendimientos bancarios».
+7. Elimina los registros sin Programa cuyo Más Info contiene «REN-RENDIMIENTOS», «Pago de ReteICA», «rendimientos bancarios», «RETEICA», «Retefuente» o «Estampillas».
 8. Señala en amarillo los comprobantes que siguen repetidos, para revisarlos.
 
 ### Etapa 2 – Conciliación de pagos

@@ -488,7 +488,7 @@ def test_zero_gross_rule_runs_before_duplicates():
     assert [(r.source_row, r.rule) for r in result.audit.removals[3:]] == [(5, "LIM-102"), (6, "LIM-102")]
 
 
-# --- Registros sin Programa de rendimientos y pagos de ReteICA (LIM-103) -------
+# --- Registros sin Programa de rendimientos, retenciones y estampillas (LIM-103) -
 
 
 def no_program_removed(result):
@@ -500,15 +500,21 @@ def test_rows_without_program_and_matching_more_info_are_removed():
         with_voucher("1", Programa=None, **{"Más Info": "REN-RENDIMIENTOS SEPTIEMBRE"}),
         with_voucher("2", Programa=" ", **{"Más Info": "pago de reteica 2026"}),   # Solo espacios = vacío
         with_voucher("3", Programa=None, **{"Más Info": "Traslado de  Rendimientos Bancarios"}),
-        with_voucher("4", Programa=None),                                         # Más Info sin los textos
+        with_voucher("4", Programa=None, **{"Más Info": "Descuento ReteICA Bogotá"}),
+        with_voucher("5", Programa=None, **{"Más Info": "RETEFUENTE OCTUBRE"}),
+        with_voucher("6", Programa=None, **{"Más Info": "Pago estampillas"}),
+        with_voucher("7", Programa=None),                                         # Más Info sin los textos
     )
     result = run(ety_file(rows=rows))
     assert no_program_removed(result) == [
         (5, "Sin Programa y Más Info con «REN-RENDIMIENTOS»"),
         (6, "Sin Programa y Más Info con «Pago de ReteICA»"),
         (7, "Sin Programa y Más Info con «rendimientos bancarios»"),
+        (8, "Sin Programa y Más Info con «RETEICA»"),
+        (9, "Sin Programa y Más Info con «Retefuente»"),
+        (10, "Sin Programa y Más Info con «Estampillas»"),
     ]
-    assert [r["Comprobante"] for r in output_rows(result)] == ["4"]
+    assert [r["Comprobante"] for r in output_rows(result)] == ["7"]
 
 
 def test_rows_with_program_are_kept_even_with_matching_more_info():

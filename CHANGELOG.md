@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 1: la regla LIM-103 también elimina los registros sin Programa cuyo Más Info contiene «RETEICA», «Retefuente» o «Estampillas».
 - La interfaz ya no guarda una copia de cada resultado en la carpeta `output/`: los archivos se descargan con los botones. La línea de comandos sigue guardándolos en `output/`.
 - Etapa 3: el AP Voucher se lee con python-calamine (nueva dependencia y opción de entrada `fast_read`). Con el archivo real (21.000 registros), la validación al cargarlo pasa de unos 17 s a 1,6 s. Las demás entradas se siguen leyendo con openpyxl.
 - Procesar es mucho más rápido con archivos grandes: el registro completo de cada acción (hoja Acciones) se arma solo cuando se necesita, en lugar de prepararlo de antemano para todos los registros leídos. Con el AP Voucher real, Procesar en la Etapa 3 pasa de unos 38 s a 1,8 s.

@@ -119,11 +119,11 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 - Cada fila eliminada queda en la hoja *Acciones* con el motivo «Duplicado de la fila N (Comprobante X, caso 2.1/2.2)». En el log de ejecución se listan además los comprobantes de los grupos conservados por los casos 2.3 y 2.4.
 - En los reportes de ejemplo se eliminan 12 filas (…38426564) y 11 filas (…38393197). Ya no queda ningún grupo en el caso 2.4: el comprobante 00158196, que difiere en Dpto y Producto, pasa al caso 2.2 (se conserva la fila 407 y se eliminan la 408, la 409 y la 410).
 
-### Paso 8 – Eliminar los registros sin Programa de rendimientos y pagos de ReteICA (implementado)
+### Paso 8 – Eliminar los registros sin Programa de rendimientos, retenciones y estampillas (implementado)
 
 | Código | Regla |
 | --- | --- |
-| LIM-103 | Se eliminan los registros que no tienen valor en **Programa** (columna Y del archivo de salida) y cuyo **Más Info** (columna R) contiene alguno de estos textos: «REN-RENDIMIENTOS», «Pago de ReteICA» o «rendimientos bancarios». |
+| LIM-103 | Se eliminan los registros que no tienen valor en **Programa** (columna Y del archivo de salida) y cuyo **Más Info** (columna R) contiene alguno de estos textos: «REN-RENDIMIENTOS», «Pago de ReteICA», «rendimientos bancarios», «RETEICA», «Retefuente» o «Estampillas». |
 
 - El texto se busca dentro de la celda (puede tener más contenido antes o después), sin tener en cuenta mayúsculas, tildes ni espacios sobrantes.
 - Una celda de Programa con solo espacios cuenta como vacía. Si el registro tiene Programa, se conserva aunque Más Info contenga alguno de los textos.
@@ -137,7 +137,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 
 ## Archivo de salida
 
-Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O), sin los comprobantes con VR. BRUTO en 0 (LIM-102), sin los duplicados del paso 7 y sin los registros sin Programa de rendimientos y pagos de ReteICA (LIM-103).
+Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O), sin los comprobantes con VR. BRUTO en 0 (LIM-102), sin los duplicados del paso 7 y sin los registros sin Programa de rendimientos, retenciones y estampillas (LIM-103).
 
 El archivo conserva la apariencia del reporte original: el nombre de la hoja (por ejemplo, «sheet1»), los encabezados en Arial 10 negrita con fondo gris y borde doble, la fuente de los datos y los anchos de columna. La columna Diferencia toma el estilo de Importe. Las fechas se muestran como `dd/mm/aaaa` y las columnas E a K con formato de moneda; además, el encabezado tiene filtros y queda inmovilizado.
 
