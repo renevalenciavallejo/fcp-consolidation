@@ -75,6 +75,54 @@ DUPLICATE_TOLERATED_COLUMNS = ["Dpto", "Cd Fnd", "Producto"]
 # Caso 2.3: si difieren en alguna de estas, no se elimina ninguna fila del grupo.
 DUPLICATE_BLOCKING_COLUMNS = ["Subfideicomiso", "Cuenta", "Programa"]
 
+# Columnas U y V del archivo de salida (T y U del reporte): cada Cuenta debe pertenecer a su Subfideicomiso (VAL-102).
+SUBTRUST_COLUMN = "Subfideicomiso"
+ACCOUNT_COLUMN = "Cuenta"
+# Cuentas bancarias de cada Subfideicomiso: {código: [4 últimos dígitos de cada cuenta]}.
+# El ETY solo trae los 4 últimos dígitos. Sale del Excel «RELACIÓN SUBCUENTAS Y CUENTAS
+# BANCARIAS» (columnas D y G); si se abre una cuenta nueva, se agrega aquí.
+# La cuenta 000-3063120 (CONVENIO ART - ICBF - FCP) no se incluye porque en ese Excel no tiene código.
+SUBTRUST_ACCOUNTS = {
+    "1001": ["4139", "6297"],  # REINCORPORACION
+    "1002": ["4147"],  # PDET
+    "2016": ["4279"],  # PDET - CONVENIO
+    "2030": ["9203", "5815"],  # PDET - CONVENIO
+    "2032": ["4880", "5823"],  # PDET - MEJORAMIENTOS
+    "2033": ["4898"],  # PDET - UNIVERSIDAD
+    "2046": ["0378", "5849"],  # PDET- CANCILLERIA
+    "1003": ["4154", "6270", "0216", "0343", "0377"],  # SUSTITUCION
+    "2045": ["0375", "5856"],  # SUSTITUCION RENHACEMOS
+    "1004": ["4162"],  # PRIMERA INFANCIA ICBF
+    "1005": ["4170"],  # TEJIENDO PAZ - FUNCIONAMIENTO
+    "1007": ["4196"],  # IMPLEMENTACIÓN
+    "2019": ["4212"],  # AGENCIA NACIONAL DE TIERRAS 20192
+    "2034": ["0999", "0181", "5831"],  # CONVENIO ANT 1217 DE 2023
+    "2043": ["0351", "5864"],  # CONVENIO ANT 2428 DE 2024
+    "2010": ["4220"],  # HERENCIA COLOMBIA
+    "2013": ["4253"],  # BID PRESTAMO
+    "2017": ["4287"],  # AMBIENTE Y DESARROLLO SOSTENIBLE
+    "2020": ["4532", "6344"],  # KFW-CONVENIO
+    "2036": ["0239", "5872"],  # CONVENIO ART
+    "2024": ["7546"],  # NIÑEZ Y ADOLESCENCIA ICBF
+    "2035": ["0191", "5880"],  # CONVENIO IGAC
+    "2031": ["8692"],  # CATASTRO MULTIPROPÓSITO
+    "2028": ["9344", "5914"],  # CATASTRO MULTIPROPÓSITO-CONVENIO
+    "2014": ["4261"],  # RECAUDO
+    "2038": ["7687"],  # ADR
+    "2039": ["0346", "5922"],  # MADR 2403
+    "2051": ["0604", "5930"],  # MADR 2514
+    "2053": ["0623", "5948"],  # MADR - AUNAP
+    "2044": ["0350", "5955"],  # UARIV
+    "2042": ["0372"],  # SERVICIO SOCIAL PARA LA PAZ
+    "2048": ["0544", "5963"],  # SERVICIO SOCIAL PARA LA PAZ - CONVENIO MEN DAFP
+    "2049": ["0545", "5971"],  # SERVICIO SOCIAL PARA LA PAZ - CONVENIO DAFP
+    "2054": ["0659", "5989"],  # SERVICIO SOCIAL PARA LA PAZ - CONVENIO MEN
+    "2047": ["0546", "6011"],  # MINISTERIO DE TRABAJO
+    "2041": ["0597"],  # ACCIONES COMUNITARIAS Y RESTAURATIVAS
+    "2052": ["0603", "6029"],  # FCAS- AECID-ART FASE I
+    "2055": ["0700"],  # Contrapartida-FCAS- AECID-ART FASE I-
+}
+
 # Reglas propias de la etapa, en el orden en que se aplican.
 # Se usa la serie 1xx para no chocar con las reglas comunes.
 RULES = {
@@ -85,6 +133,7 @@ RULES = {
     "DUP-101": "Eliminar registros idénticos con el mismo Comprobante y Diferencia 0, sin comparar FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc (caso 2.1)",
     "DUP-102": "Eliminar registros con el mismo Comprobante y Diferencia 0 que solo difieren en Dpto, Cd Fnd y/o Producto, sin comparar FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc (caso 2.2)",
     "VAL-101": "Identificar los registros con Comprobante repetido",
+    "VAL-102": "Marcar la Cuenta de los registros en los que Subfideicomiso y Cuenta no están relacionados o falta alguno de los dos",
 }
 
 # Todas las reglas que aplica la etapa (comunes y propias), en el orden en que se

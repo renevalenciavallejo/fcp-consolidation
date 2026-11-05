@@ -119,6 +119,20 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 - Cada fila eliminada queda en la hoja *Acciones* con el motivo «Duplicado de la fila N (Comprobante X, caso 2.1/2.2)». En el log de ejecución se listan además los comprobantes de los grupos conservados por los casos 2.3 y 2.4.
 - En los reportes de ejemplo se eliminan 12 filas (…38426564) y 11 filas (…38393197). Ya no queda ningún grupo en el caso 2.4: el comprobante 00158196, que difiere en Dpto y Producto, pasa al caso 2.2 (se conserva la fila 407 y se eliminan la 408, la 409 y la 410).
 
+### Paso 8 – Validar la relación entre Subfideicomiso y Cuenta (implementado)
+
+| Código | Regla |
+| --- | --- |
+| VAL-102 | Cada **Cuenta** debe pertenecer a su **Subfideicomiso**. Si los dos valores no están relacionados o falta alguno, el registro se señala como **Error**: se resalta en rojo la celda de Cuenta (columna U del reporte, V del archivo de salida), aunque esté vacía. |
+
+- **Relación:** sale del Excel «RELACIÓN SUBCUENTAS Y CUENTAS BANCARIAS» (columna D, código del Subfideicomiso; columna G, cuenta bancaria) y está en `SUBTRUST_ACCOUNTS` de `config.py`: 39 subfideicomisos y 63 cuentas. Si se abre una cuenta nueva, se agrega allí.
+- **Comparación:** el ETY solo trae los 4 últimos dígitos de la cuenta, así que se compara con los 4 últimos dígitos de cada cuenta de la relación. Esos 4 dígitos no se repiten entre cuentas.
+- **Cuenta sin código:** la cuenta `000-3063120` (CONVENIO ART - ICBF - FCP) no tiene código en el Excel y se excluye de la relación.
+- **Subfideicomiso sin cuentas o desconocido:** un código que no está en la relación, o que no tiene cuenta (el 2050, en trámite de apertura), no tiene cuentas relacionadas: sus registros se señalan.
+- Se ejecuta **al final**, para señalar solo los registros que quedan en el archivo. Incluye los registros sin Programa que se eliminan en la Etapa 2 (LIM-202).
+- No se cambia ningún valor ni se elimina ningún registro: el usuario corrige el dato. Cada caso queda en la hoja *Acciones* («La Cuenta 8692 no corresponde al Subfideicomiso 1002», «Falta Cuenta», «Falta Subfideicomiso» o «Faltan Subfideicomiso y Cuenta»).
+- En los reportes de ejemplo se señalan 3 registros en …38577172 y 5 en …38640228; en …38393197, …38426564, …38526098 y …38705056, ninguno.
+
 ### Registros sin Programa: se conservan
 
 Los registros sin **Programa** cuyo **Más Info** contiene «REN-RENDIMIENTOS», «Pago de ReteICA», «rendimientos bancarios», «RETEICA», «Retefuente» o «Estampillas» (pagos de rendimientos, retenciones y estampillas) **se conservan** en esta etapa y no se marcan, para no llenar el archivo de colores. Antes se eliminaban aquí (regla LIM-103), pero los informes de pago de Tesorería también traen esos pagos: si se eliminaran, los totales de la Etapa 2 no coincidirían. Ahora se eliminan en la Etapa 2, después de conciliar (regla LIM-202).
@@ -130,7 +144,7 @@ Los registros sin **Programa** cuyo **Más Info** contiene «REN-RENDIMIENTOS»,
 
 ## Archivo de salida
 
-Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O), sin los comprobantes con VR. BRUTO en 0 (LIM-102) y sin los duplicados del paso 7. Los registros sin Programa de rendimientos, retenciones y estampillas se conservan (se eliminan en la Etapa 2).
+Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O), sin los comprobantes con VR. BRUTO en 0 (LIM-102) y sin los duplicados del paso 7. Los registros sin Programa de rendimientos, retenciones y estampillas se conservan (se eliminan en la Etapa 2). Los comprobantes que siguen repetidos quedan en amarillo y las cuentas que no corresponden a su Subfideicomiso, en rojo.
 
 El archivo conserva la apariencia del reporte original: el nombre de la hoja (por ejemplo, «sheet1»), los encabezados en Arial 10 negrita con fondo gris y borde doble, la fuente de los datos y los anchos de columna. La columna Diferencia toma el estilo de Importe. Las fechas se muestran como `dd/mm/aaaa` y las columnas E a K con formato de moneda; además, el encabezado tiene filtros y queda inmovilizado.
 

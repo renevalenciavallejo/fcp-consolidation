@@ -32,7 +32,7 @@ INFO = "Información"         # Solo para conocimiento
 
 # Color de resaltado (RGB hexadecimal) de las celdas con hallazgos, por severidad.
 SEVERITY_FILLS = {
-    ERROR: "FFC7CE",     # Rojo claro
+    ERROR: "FF7C80",     # Rojo
     WARNING: "FFEB9C",   # Amarillo claro
 }
 

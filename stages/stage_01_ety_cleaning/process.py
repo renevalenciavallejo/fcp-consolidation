@@ -9,10 +9,11 @@ en el orden de ESPECIFICACION.md. Cada regla abre un paso del log de ejecución
 import pandas as pd
 
 from core.audit import AuditLog, data_columns, is_empty
-from core.cleaning import comparable_text, convert_columns, flag_repeated_values, sort_rows
-from core.settings import CURRENCY_FORMAT_EXCEL, SOURCE_ROW, WARNING
+from core.cleaning import comparable_text, convert_columns, flag_repeated_values, normalize_code, sort_rows
+from core.settings import CURRENCY_FORMAT_EXCEL, ERROR, SOURCE_FILE, SOURCE_ROW, WARNING
 from core.writer import ExcelFormula
 from stages.stage_01_ety_cleaning.config import (
+    ACCOUNT_COLUMN,
     AMOUNT_COLUMN,
     CASH_DISTRIBUTION_VALUE,
     DESCRIPTION_COLUMN,
@@ -25,6 +26,8 @@ from stages.stage_01_ety_cleaning.config import (
     DUPLICATE_TOLERATED_COLUMNS,
     GROSS_AMOUNT_COLUMN,
     INPUTS,
+    SUBTRUST_ACCOUNTS,
+    SUBTRUST_COLUMN,
     VOUCHER_COLUMN,
 )
 
@@ -51,6 +54,9 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     # Al final de la depuración, para que solo se marquen los que siguen repetidos.
     audit.step(f"Revisando registros con {VOUCHER_COLUMN} repetido")
     flag_repeated_vouchers(df, audit)
+    # También al final: así solo se marcan los registros que quedan en el archivo.
+    audit.step(f"Validando la relación entre {SUBTRUST_COLUMN} y {ACCOUNT_COLUMN}")
+    flag_unrelated_accounts(df, audit)
     return df
 
 
@@ -99,6 +105,38 @@ def flag_repeated_vouchers(df: pd.DataFrame, audit: AuditLog) -> None:
         df, VOUCHER_COLUMN, audit, "VAL-101", WARNING,
         "Revisar si el registro está duplicado",
     )
+
+
+def account_problem(subtrust: str | None, account: str | None) -> str | None:
+    """Explica por qué Subfideicomiso y Cuenta no son válidos juntos, o None si lo son.
+
+    Un Subfideicomiso que no está en SUBTRUST_ACCOUNTS no tiene cuentas relacionadas.
+    """
+    if subtrust is None and account is None:
+        return f"Faltan {SUBTRUST_COLUMN} y {ACCOUNT_COLUMN}"
+    if subtrust is None:
+        return f"Falta {SUBTRUST_COLUMN}"
+    if account is None:
+        return f"Falta {ACCOUNT_COLUMN}"
+    if account not in SUBTRUST_ACCOUNTS.get(subtrust, []):
+        return f"La {ACCOUNT_COLUMN} {account} no corresponde al {SUBTRUST_COLUMN} {subtrust}"
+    return None
+
+
+def flag_unrelated_accounts(df: pd.DataFrame, audit: AuditLog) -> None:
+    """Marca como Error la Cuenta que no corresponde a su Subfideicomiso. Regla VAL-102.
+
+    También se marca si falta alguno de los dos. Siempre se resalta la celda de
+    Cuenta, aunque esté vacía. No se cambia ningún valor: el usuario lo corrige.
+    """
+    for index in df.index:
+        account = df.at[index, ACCOUNT_COLUMN]
+        problem = account_problem(normalize_code(df.at[index, SUBTRUST_COLUMN]), normalize_code(account))
+        if problem:
+            audit.finding(
+                df.at[index, SOURCE_FILE], df.at[index, SOURCE_ROW], ACCOUNT_COLUMN, ERROR, "VAL-102",
+                problem, account, f"Revisar {SUBTRUST_COLUMN} y {ACCOUNT_COLUMN} del registro",
+            )
 
 
 def difference_values(df: pd.DataFrame) -> pd.Series:

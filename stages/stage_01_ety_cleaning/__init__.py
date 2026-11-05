@@ -8,7 +8,7 @@ DESCRIPTION = (
     "Valida la estructura del reporte ETY de pagos, convierte los "
     "valores a moneda, agrega la columna Diferencia, elimina las filas de «Distribución Caja», "
     "los comprobantes con VR. BRUTO en 0 y los duplicados según reglas definidas, "
-    "y señala los comprobantes repetidos."
+    "señala los comprobantes repetidos y las cuentas que no corresponden a su subfideicomiso."
 )
 INPUTS = config.INPUTS
 RULES = config.RULES

@@ -39,6 +39,7 @@ Se carga **un** reporte ETY de pagos (24 columnas, encabezados en la fila 4). La
    - los comprobantes que tienen VR. BRUTO en 0 en todos sus registros;
    - los duplicados del mismo Comprobante que son iguales o que solo difieren en Dpto, Cd Fnd o Producto (se conserva el primero). Si difieren en Subfideicomiso, Cuenta, Programa u otra columna, se conservan todos.
 7. Señala en amarillo los comprobantes que siguen repetidos, para revisarlos.
+8. Señala en rojo la celda de **Cuenta** si no corresponde a su Subfideicomiso o si falta alguno de los dos, para corregirlo.
 
 ### Etapa 2 – Conciliación de pagos
 
@@ -127,7 +128,7 @@ El log es un archivo de Excel con tres hojas:
 
 La columna **Fila** indica la fila en su archivo original, para que pueda ubicarla fácilmente en Excel.
 
-En el archivo procesado, las celdas con hallazgos quedan resaltadas: **rojo claro** para los errores, **amarillo claro** para las advertencias y, en la Etapa 3, **naranja claro** (comprobantes cerrados) y **gris claro** (comprobantes cancelados).
+En el archivo procesado, las celdas con hallazgos quedan resaltadas: **rojo** para los errores, **amarillo claro** para las advertencias y, en la Etapa 3, **naranja claro** (comprobantes cerrados) y **gris claro** (comprobantes cancelados).
 
 ### Si algo sale mal
 

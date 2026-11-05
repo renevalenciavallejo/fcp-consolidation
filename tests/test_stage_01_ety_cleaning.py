@@ -7,8 +7,10 @@ import pytest
 from openpyxl import load_workbook
 
 from core.runner import StageError, run_stage
+from core.settings import ERROR, SEVERITY_FILLS
 from core.stage import applied_rules
 from stages import stage_01_ety_cleaning
+from stages.stage_01_ety_cleaning.config import SUBTRUST_ACCOUNTS
 from tests.helpers import make_xlsx
 
 COLUMNS = list(stage_01_ety_cleaning.INPUTS["ety_report"]["columns"])
@@ -237,7 +239,7 @@ def test_repeated_vouchers_are_flagged_and_rows_sorted():
     rows = (
         with_voucher("00000003"),                       # fila 5
         with_voucher("00000001"),                       # fila 6
-        with_voucher("00000003", Cuenta="9999"),        # fila 7 (repetido, distinta Cuenta: se conserva)
+        with_voucher("00000003", Programa="9999"),      # fila 7 (repetido, distinto Programa: se conserva)
         with_voucher("00000002"),                       # fila 8
         with_voucher("00000002", "Distribución Caja"),  # fila 9: se elimina antes, no cuenta
     )
@@ -279,6 +281,7 @@ def test_step_log_shows_each_rule():
         "▸ Eliminando los comprobantes con VR. BRUTO en 0 (con Diferencia 0)",
         "▸ Eliminando registros duplicados por Comprobante (con Diferencia 0)",
         "▸ Revisando registros con Comprobante repetido",
+        "▸ Validando la relación entre Subfideicomiso y Cuenta",
         "▸ Generando el archivo de salida y el log",
     ]
     assert "   ✓ 1 fila eliminada: fila 6" in lines   # Distribución Caja
@@ -383,7 +386,7 @@ def test_first_is_the_highest_row_in_the_original_file():
 
 
 def test_kept_rows_of_a_cleaned_group_are_not_flagged_as_repeated():
-    result, _ = dedup_run(with_voucher("1"), with_voucher("1"), with_voucher("2"), with_voucher("2", Cuenta="X"))
+    result, _ = dedup_run(with_voucher("1"), with_voucher("1"), with_voucher("2"), with_voucher("2", Programa="X"))
     flagged = [(f.source_row, f.rule) for f in result.audit.findings]
     assert flagged == [(7, "VAL-101"), (8, "VAL-101")]  # Solo el grupo 2, que sigue repetido
 
@@ -499,6 +502,94 @@ def test_rows_without_program_are_kept_for_stage_2():
     assert result.audit.findings == []
 
 
+# --- VAL-102: relación entre Subfideicomiso y Cuenta -----------------------------
+
+
+def account_findings(*rows):
+    """Procesa las filas y devuelve el resultado y sus hallazgos VAL-102 (fila, columna, severidad, descripción)."""
+    result = run(ety_file(rows=rows))
+    findings = [
+        (f.source_row, f.column, f.severity, f.description)
+        for f in result.audit.findings if f.rule == "VAL-102"
+    ]
+    return result, findings
+
+
+def test_related_accounts_are_not_flagged():
+    # Cuentas de los 4 últimos dígitos, con cero a la izquierda y de un subfideicomiso con varias.
+    rows = (
+        with_voucher("1", Subfideicomiso="1002", Cuenta="4147"),
+        with_voucher("2", Subfideicomiso="2034", Cuenta="0181"),
+        with_voucher("3", Subfideicomiso="1003", Cuenta="0216"),
+        with_voucher("4", Subfideicomiso=1002, Cuenta=4147),   # Guardados como número
+    )
+    assert account_findings(*rows)[1] == []
+
+
+def test_unrelated_account_is_flagged_as_error_only_in_account_cell():
+    result, findings = account_findings(with_voucher("1", Subfideicomiso="1002", Cuenta="8692"))
+    assert findings == [(5, "Cuenta", "Error", "La Cuenta 8692 no corresponde al Subfideicomiso 1002")]
+
+    sheet = load_workbook(BytesIO(result.output_bytes)).active
+    assert sheet["U1"].value == "Subfideicomiso" and sheet["V1"].value == "Cuenta"
+    assert sheet["V2"].fill.start_color.rgb.endswith(SEVERITY_FILLS[ERROR])
+    assert sheet["U2"].fill.fill_type is None
+    assert sheet["U2"].value == "1002" and sheet["V2"].value == "8692"   # No se cambia ningún valor
+
+
+@pytest.mark.parametrize(
+    ("subtrust", "account", "description"),
+    [
+        ("1002", None, "Falta Cuenta"),
+        ("1002", "   ", "Falta Cuenta"),
+        (None, "4147", "Falta Subfideicomiso"),
+        (None, None, "Faltan Subfideicomiso y Cuenta"),
+    ],
+)
+def test_missing_value_marks_the_account_cell_even_if_empty(subtrust, account, description):
+    result, findings = account_findings(with_voucher("1", Subfideicomiso=subtrust, Cuenta=account))
+    assert findings == [(5, "Cuenta", "Error", description)]
+    sheet = load_workbook(BytesIO(result.output_bytes)).active
+    assert sheet["V2"].fill.start_color.rgb.endswith(SEVERITY_FILLS[ERROR])
+    assert sheet["U2"].fill.fill_type is None
+
+
+@pytest.mark.parametrize(
+    ("subtrust", "account"),
+    [
+        ("9999", "4147"),   # Subfideicomiso que no está en la relación
+        ("2050", "4147"),   # Subfideicomiso sin cuenta (en trámite de apertura)
+        ("2024", "3120"),   # Cuenta sin código en el Excel de la relación: se excluye
+        ("1002", "44147"),  # El reporte trae solo 4 dígitos; otro formato no corresponde
+    ],
+)
+def test_accounts_outside_the_relation_are_flagged(subtrust, account):
+    _, findings = account_findings(with_voucher("1", Subfideicomiso=subtrust, Cuenta=account))
+    assert findings == [(5, "Cuenta", "Error", f"La Cuenta {account} no corresponde al Subfideicomiso {subtrust}")]
+
+
+def test_only_remaining_rows_are_validated():
+    bad = {"Subfideicomiso": "1002", "Cuenta": "8692"}
+    rows = (
+        with_voucher("1", "Distribución Caja", **bad),   # Fila 5: se elimina antes
+        with_voucher("2", **bad),                        # Fila 6: se conserva
+        with_voucher("2", **bad),                        # Fila 7: duplicado de la 6, se elimina
+    )
+    assert [f[0] for f in account_findings(*rows)[1]] == [6]
+
+
+def test_rows_without_program_are_also_validated():
+    rows = (with_voucher("1", Programa=None, Subfideicomiso="2036", Cuenta="0181", **{"Más Info": "Pago de Retefuente"}),)
+    assert [f[0] for f in account_findings(*rows)[1]] == [5]
+
+
+def test_account_relation_has_four_digits_and_no_shared_accounts():
+    accounts = [a for group in SUBTRUST_ACCOUNTS.values() for a in group]
+    assert all(len(a) == 4 and a.isdigit() for a in accounts)
+    assert len(accounts) == len(set(accounts)) == 63
+    assert len(SUBTRUST_ACCOUNTS) == 39
+
+
 # --- Reglas que consulta el usuario --------------------------------------------
 
 
@@ -507,7 +598,7 @@ def test_applied_rules_follow_the_processing_order():
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",
         "LIM-003", "TIP-005", "LIM-101", "TRA-101", "TRA-102", "LIM-102", "DUP-101", "DUP-102",
-        "VAL-101",
+        "VAL-101", "VAL-102",
     ]
     # Las reglas propias aparecen en el mismo orden en que se aplican en el log de acciones.
     rows = (zero_gross("9"), with_voucher("1"), with_voucher("1"), with_voucher("2"), with_voucher("2", Cuenta="X"),
@@ -521,4 +612,4 @@ def test_rules_sheet_in_log():
     rows = list(sheet.iter_rows(values_only=True))
     assert rows[0] == ("Orden", "Código", "Regla")
     assert rows[1] == (1, "EST-007", "Validar que se carguen los archivos obligatorios y no sobren archivos")
-    assert len(rows) == 17
+    assert len(rows) == 18
