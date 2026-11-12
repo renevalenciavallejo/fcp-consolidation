@@ -2,7 +2,7 @@
 
 Objetivo: integrar la información del reporte ETY procesado en la Etapa 3 al archivo **Detalle de pago**. La etapa genera un archivo con la misma estructura y el mismo formato del Detalle de pago, que el usuario importa después manualmente a ese archivo.
 
-**Estado actual:** se carga y valida el reporte ETY y se genera el archivo con la estructura y el formato del Detalle de pago, con los valores de 12 columnas del ETY copiados fila por fila y VALIDACION calculada con la fórmula de Diferencia. Las demás columnas se agregarán cuando se especifiquen.
+**Estado actual:** se carga y valida el reporte ETY y se genera el archivo con la estructura y el formato del Detalle de pago, con los valores de 14 columnas del ETY copiados fila por fila, VALIDACION calculada con la fórmula de Diferencia y CONTRATO con la fórmula del Detalle de pago. Las demás columnas se agregarán cuando se especifiquen.
 
 ## Archivo de entrada
 
@@ -64,14 +64,20 @@ Debajo de los encabezados, los valores del reporte ETY se copian fila por fila, 
 | L (Asiento) | L (ASIENTO) |
 | O (Comprobante) | M (COMPROBANTE), con el prefijo «656-» (`00153414` → `656-00153414`) |
 | Q (Nº Sec Doc) | N (NO_SEC_DOC) |
+| R (Más Info) | V (CONCEPTO) |
+| U (Subfideicomiso) | Q (SUBFIDEICOMISO) |
 
-IDENTIFICACION se escribe como **número** (el ETY la trae como texto), para que Excel no la marque como «Número almacenado como texto»; lo que se ve no cambia. Solo se convierten los valores con únicamente dígitos y sin ceros a la izquierda; los demás (por ejemplo, con guion) se copian como texto y el log indica cuántos son.
+IDENTIFICACION y SUBFIDEICOMISO se escriben como **número** (el ETY los trae como texto), para que Excel no la marque como «Número almacenado como texto»; lo que se ve no cambia. Solo se convierten los valores con únicamente dígitos y sin ceros a la izquierda; los demás (por ejemplo, con guion) se copian como texto y el log indica cuántos son.
 
 Las fechas y los valores se copian como fecha y número; se ven con el formato de la columna destino del Detalle de pago (fecha `d/mm/aaaa` y contabilidad en pesos), no con el del ETY. Las demás columnas del Detalle de pago quedan vacías (con su formato y bordes). El log de ejecución indica cuántos registros se copiaron.
 
 ### Paso 4 – VALIDACION (TRA-403, implementado)
 
 La columna K (Diferencia) del ETY corresponde a K (VALIDACION). En el ETY, Diferencia es una fórmula de Excel (regla TRA-101 de la Etapa 1) y su resultado no queda guardado en el archivo mientras no se abra y guarde en Excel, así que su valor no se puede copiar. VALIDACION se escribe en cada fila con la misma fórmula sobre las columnas copiadas: `=E2-F2-G2-H2-I2-J2` (VR_BRUTO − VR_RTEFTE − VR_RETEIVA − VR_RETEICA − VR_TASAS − VR_NETO), igual a la del Detalle de pago. El resultado aparece al abrir el archivo en Excel, con formato de contabilidad en pesos.
+
+### Paso 5 – CONTRATO (TRA-404, implementado)
+
+Una vez copiado CONCEPTO, la columna O (CONTRATO) se escribe en cada fila con la misma fórmula del Detalle de pago (`DetallePagoEjemploFormato.xlsx`), sobre CONCEPTO de la misma fila. Toma el número que sigue a «CONTRATO» (`..._CONTRATO_303-2026_...` → `303`). El resultado aparece al abrir el archivo en Excel. Si CONCEPTO no contiene «CONTRATO», Excel muestra `#¡VALOR!`, igual que en el Detalle de pago.
 
 ## Archivo de salida
 
@@ -90,4 +96,4 @@ La configuración de este formato está en `OUTPUT_LAYOUT` (`config.py`). El arc
 
 ## Pendiente por especificar
 
-- Cómo se llenan las demás columnas del Detalle de pago (incluidas las fórmulas de ITEM, CONTRATO y CONTRATO_2 del ejemplo).
+- Cómo se llenan las demás columnas del Detalle de pago (incluidas las fórmulas de ITEM y CONTRATO_2 del ejemplo).

@@ -11,12 +11,10 @@ from core.cleaning import normalize_code
 from core.settings import SOURCE_FILE, SOURCE_ROW
 from core.writer import ExcelFormula
 from stages.stage_04_payment_detail.config import (
-    ACCOUNTING_FORMAT,
     COLUMN_MAPPING,
+    FORMULA_COLUMNS,
     NUMBER_COLUMNS,
     OUTPUT_LAYOUT,
-    VALIDATION_COLUMN,
-    VALIDATION_FORMULA,
     VALUE_PREFIXES,
 )
 
@@ -27,8 +25,10 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     detail = empty_payment_detail(ety, audit)
     audit.step("Copiando los datos del reporte ETY al Detalle de pago")
     detail = copy_ety_values(ety, detail, audit)
-    audit.step(f"Calculando {VALIDATION_COLUMN}")
-    return add_validation(detail, audit)
+    for formula in FORMULA_COLUMNS:
+        audit.step(f"Calculando {formula['column']}")
+        add_formula(detail, formula, audit)
+    return detail
 
 
 def empty_payment_detail(ety: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
@@ -81,16 +81,17 @@ def add_prefix(detail: pd.DataFrame, column: str, prefix: str, audit: AuditLog) 
     audit.transformation("TRA-402", f"{column}: prefijo «{prefix}» agregado a {filled} valores")
 
 
-def add_validation(detail: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
-    """VALIDACION con la fórmula de Diferencia del ETY, en cada fila. Regla TRA-403.
+def add_formula(detail: pd.DataFrame, formula: dict, audit: AuditLog) -> None:
+    """Escribe en cada fila la fórmula de Excel de la columna (FORMULA_COLUMNS). Reglas TRA-403 y TRA-404.
 
-    No se copia el valor de Diferencia porque en el ETY es una fórmula cuyo resultado no
-    queda guardado en el archivo (openpyxl no calcula fórmulas). La misma fórmula sobre las
-    columnas copiadas da el mismo resultado al abrir el archivo en Excel.
+    openpyxl no calcula fórmulas: el resultado aparece al abrir el archivo en Excel.
+    - VALIDACION: la fórmula de Diferencia del ETY, porque su resultado no queda guardado
+      en el archivo y no se puede copiar.
+    - CONTRATO: la fórmula del Detalle de pago, que toma el número de contrato de CONCEPTO.
     """
-    detail[VALIDATION_COLUMN] = [ExcelFormula(VALIDATION_FORMULA, ACCOUNTING_FORMAT)] * len(detail)
-    audit.transformation("TRA-403", f"{VALIDATION_COLUMN}: fórmula {VALIDATION_FORMULA} en {len(detail)} filas")
-    return detail
+    column = formula["column"]
+    detail[column] = [ExcelFormula(formula["formula"], formula["format"])] * len(detail)
+    audit.transformation(formula["rule"], f"{column}: fórmula de Excel en {len(detail)} filas")
 
 
 def write_as_numbers(detail: pd.DataFrame, column: str, audit: AuditLog) -> None:

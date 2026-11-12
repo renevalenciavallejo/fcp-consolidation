@@ -97,6 +97,7 @@ def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_04_payment_detail)]
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-403",
+        "TRA-404",
     ]
 
 
@@ -105,7 +106,9 @@ def test_output_has_the_payment_detail_columns():
     sheet = output_sheet(result)
     assert sheet.title == "Hoja1"
     assert [c.value for c in sheet[1]] == DETAIL_COLUMNS
-    assert [a.rule for a in result.audit.transformations] == ["TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-403"]
+    assert [a.rule for a in result.audit.transformations] == [
+        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-403", "TRA-404",
+    ]
 
 
 def test_ety_values_are_copied_row_by_row_without_changes():
@@ -119,13 +122,13 @@ def test_ety_values_are_copied_row_by_row_without_changes():
         for ety_column, detail_column in COLUMN_MAPPING.items():
             cell = sheet.cell(row, DETAIL_COLUMNS.index(detail_column) + 1)
             expected = record[ety_column]
-            if detail_column == "IDENTIFICACION":
+            if detail_column in ("IDENTIFICACION", "SUBFIDEICOMISO"):
                 expected = int(expected)   # Se escribe como número (ver test_identification_is_written_as_number)
             if detail_column == "COMPROBANTE":
                 expected = f"656-{expected}"   # Con el prefijo (ver test_voucher_gets_the_656_prefix)
             assert cell.value == expected, (row, detail_column)
     # Las columnas sin correspondencia quedan vacías.
-    unmapped = [c for c in DETAIL_COLUMNS if c not in [*COLUMN_MAPPING.values(), "VALIDACION"]]
+    unmapped = [c for c in DETAIL_COLUMNS if c not in [*COLUMN_MAPPING.values(), "VALIDACION", "CONTRATO"]]
     assert all(sheet.cell(2, DETAIL_COLUMNS.index(c) + 1).value is None for c in unmapped)
     assert "2 registros del reporte ETY copiados" in "\n".join(result.audit.step_lines())
 
@@ -149,6 +152,8 @@ def test_new_columns_are_mapped():
     assert COLUMN_MAPPING["Asiento"] == "ASIENTO"
     assert COLUMN_MAPPING["Comprobante"] == "COMPROBANTE"
     assert COLUMN_MAPPING["Nº Sec Doc"] == "NO_SEC_DOC"
+    assert COLUMN_MAPPING["Más Info"] == "CONCEPTO"
+    assert COLUMN_MAPPING["Subfideicomiso"] == "SUBFIDEICOMISO"
 
 
 def test_voucher_gets_the_656_prefix():
@@ -170,6 +175,25 @@ def test_validation_is_the_difference_formula_of_each_row():
     assert sheet["K2"].value == "=E2-F2-G2-H2-I2-J2"
     assert sheet["K3"].value == "=E3-F3-G3-H3-I3-J3"
     assert sheet["K2"].number_format == ACCOUNTING_FORMAT
+
+
+def test_subtrust_is_written_as_number():
+    result = run(stage_3_output())
+    sheet = output_sheet(result)
+    assert sheet["Q2"].value == 1002 and sheet["Q2"].data_type == "n"
+    assert "SUBFIDEICOMISO: 2 valores escritos como número" in "\n".join(result.audit.step_lines())
+
+
+def test_contract_is_the_payment_detail_formula_over_concept():
+    sheet = output_sheet(run(stage_3_output()))
+    assert sheet["V2"].value == "DS_PRUEBA"
+    formula = sheet["O2"].value
+    # La misma fórmula del Detalle de pago, sobre CONCEPTO (columna V) de la misma fila.
+    assert formula.startswith('=MID(SUBSTITUTE(MID(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(V2," ","_")')
+    assert 'SEARCH("CONTRATO",V2,1),LEN(V2))' in formula
+    assert "{" not in formula and "V3" not in formula
+    assert "V3" in sheet["O3"].value
+    assert sheet["O2"].number_format == "General"
 
 
 def test_copied_values_take_the_payment_detail_cell_formats():

@@ -117,24 +117,51 @@ COLUMN_MAPPING = {
     "Asiento": "ASIENTO",
     "Comprobante": "COMPROBANTE",
     "Nº Sec Doc": "NO_SEC_DOC",
+    "Más Info": "CONCEPTO",
+    "Subfideicomiso": "SUBFIDEICOMISO",
 }
 
 # Texto que se antepone al copiar el valor de una columna (columna del Detalle de pago: prefijo).
 # El Detalle de pago identifica el comprobante con el código del negocio: 00153414 -> 656-00153414.
 VALUE_PREFIXES = {"COMPROBANTE": "656-"}
 
-# Diferencia del ETY -> VALIDACION. En el ETY, Diferencia es una fórmula de Excel (regla TRA-101
-# de la Etapa 1) cuyo resultado no queda guardado en el archivo hasta que se abre y guarda en
-# Excel, así que no se puede copiar su valor. VALIDACION se escribe con la misma fórmula, sobre
-# las columnas ya copiadas de la misma fila (como en el Detalle de pago: =+E2-F2-G2-H2-I2-J2).
-VALIDATION_COLUMN = "VALIDACION"
-VALIDATION_FORMULA = "={VR_BRUTO}-{VR_RTEFTE}-{VR_RETEIVA}-{VR_RETEICA}-{VR_TASAS}-{VR_NETO}"
+# Columnas del Detalle de pago que se calculan con una fórmula de Excel en cada fila, después
+# de copiar los datos, en este orden: regla, columna, fórmula (las columnas se nombran entre
+# llaves y se convierten en la celda de la misma fila) y formato de número (None = General).
+# - VALIDACION es la Diferencia del ETY. En el ETY, Diferencia es una fórmula de Excel (regla
+#   TRA-101 de la Etapa 1) cuyo resultado no queda guardado en el archivo hasta que se abre y
+#   guarda en Excel, así que no se puede copiar su valor: se escribe la misma fórmula (como en
+#   el Detalle de pago: =+E2-F2-G2-H2-I2-J2).
+# - CONTRATO es la fórmula del Detalle de pago (DetallePagoEjemploFormato.xlsx), que toma de
+#   CONCEPTO el número que sigue a «CONTRATO» («..._CONTRATO_303-2026_...» -> 303). Si CONCEPTO
+#   no contiene «CONTRATO», Excel muestra #¡VALOR!, igual que en el Detalle de pago.
+CONTRACT_TEXT = (
+    'MID(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({CONCEPTO}," ","_"),"/","_"),"-","_"),'
+    'SEARCH("CONTRATO",{CONCEPTO},1),LEN({CONCEPTO}))'
+)
+FORMULA_COLUMNS = [
+    {
+        "rule": "TRA-403",
+        "column": "VALIDACION",
+        "formula": "={VR_BRUTO}-{VR_RTEFTE}-{VR_RETEIVA}-{VR_RETEICA}-{VR_TASAS}-{VR_NETO}",
+        "format": ACCOUNTING_FORMAT,
+    },
+    {
+        "rule": "TRA-404",
+        "column": "CONTRATO",
+        "formula": (
+            f'=MID(SUBSTITUTE({CONTRACT_TEXT},"CONTRATO_",""),1,'
+            f'SEARCH("_",SUBSTITUTE({CONTRACT_TEXT},"CONTRATO_",""),1)-1)'
+        ),
+        "format": None,
+    },
+]
 
 # Columnas del Detalle de pago donde los números que en el ETY vienen como texto (códigos)
 # se escriben como número, para que Excel no los marque como «Número almacenado como texto».
 # Solo los valores formados únicamente por dígitos y sin ceros a la izquierda; los demás se
 # copian como texto, para no cambiar lo que se ve.
-NUMBER_COLUMNS = ["IDENTIFICACION"]
+NUMBER_COLUMNS = ["IDENTIFICACION", "SUBFIDEICOMISO"]
 
 # Reglas propias de la etapa (serie 4xx).
 RULES = {
@@ -147,12 +174,17 @@ RULES = {
         "Identificación → IDENTIFICACION, Tercero Principal → TERCERO, FECHA DE PAGO → FECHA_DE_PAGO, "
         "VR. BRUTO → VR_BRUTO, VR. RTEFTE → VR_RTEFTE, VR. RETEIVA → VR_RETEIVA, VR. RETEICA → VR_RETEICA, "
         "VR. TASAS → VR_TASAS, Importe → VR_NETO, Asiento → ASIENTO, Comprobante → COMPROBANTE (con el "
-        "prefijo «656-») y Nº Sec Doc → NO_SEC_DOC. IDENTIFICACION se escribe como número (si tiene "
-        "solo dígitos y no empieza por cero). Las demás columnas quedan vacías"
+        "prefijo «656-»), Nº Sec Doc → NO_SEC_DOC, Más Info → CONCEPTO y Subfideicomiso → SUBFIDEICOMISO. "
+        "IDENTIFICACION y SUBFIDEICOMISO se escriben como número (si tienen solo dígitos y no empiezan "
+        "por cero). Las demás columnas quedan vacías"
     ),
     "TRA-403": (
         "Calcular VALIDACION con la misma fórmula de Diferencia del ETY: VR_BRUTO - VR_RTEFTE - VR_RETEIVA "
         "- VR_RETEICA - VR_TASAS - VR_NETO (fórmula de Excel en cada fila)"
+    ),
+    "TRA-404": (
+        "Calcular CONTRATO con la fórmula del Detalle de pago, que toma de CONCEPTO el número que sigue "
+        "a «CONTRATO» (por ejemplo, «..._CONTRATO_303-2026_...» -> 303; fórmula de Excel en cada fila)"
     ),
 }
 
