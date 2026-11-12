@@ -2,7 +2,9 @@
 
 Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
-## Sin publicar
+## 1.0.0 – 2026-11-12
+
+Primera versión para uso de los usuarios: Etapas 1 a 4 (limpieza del reporte ETY, conciliación de pagos, cruce con el AP Voucher e integración al Detalle de pago).
 
 - Etapa 4: se copian también Cuenta → CUENTA (como número) y Programa → PROGRAMA (como texto, con sus ceros). Todos los registros llevan los valores fijos del Detalle de pago: FIDUCIARIA_QUE_EFECTUO_EL_PAGO «FIDUPREVISORA», GL 656, Q_PAGOS «1», AMORTIZACION_ANTICIPO 0 y MULTA 0 (regla TRA-405).
 - Etapa 4: se copian también Más Info → CONCEPTO y Subfideicomiso → SUBFIDEICOMISO (como número, igual que IDENTIFICACION). CONTRATO se escribe en cada fila con la fórmula del Detalle de pago, que toma de CONCEPTO el número de contrato (regla TRA-404).
