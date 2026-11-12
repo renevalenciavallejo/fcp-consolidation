@@ -11,7 +11,13 @@ from core.audit import AuditLog
 from core.runner import StageError, file_name_warnings, run_stage, validate_input
 from core.stage import applied_rules, input_specs, stage_rules
 from stages import STAGES, stage_03_ap_voucher_validation, stage_04_payment_detail
-from stages.stage_04_payment_detail.config import ACCOUNTING_FORMAT, COLUMN_MAPPING, DATE_FORMAT, OUTPUT_LAYOUT
+from stages.stage_04_payment_detail.config import (
+    ACCOUNTING_FORMAT,
+    COLUMN_MAPPING,
+    DATE_FORMAT,
+    FIXED_VALUES,
+    OUTPUT_LAYOUT,
+)
 from stages.stage_04_payment_detail.process import add_prefix, as_number
 from tests.helpers import make_xlsx
 from tests.test_stage_01_ety_cleaning import OUTPUT_COLUMNS, ety_file
@@ -96,8 +102,8 @@ def test_ety_is_validated_on_upload():
 def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_04_payment_detail)]
     assert codes == [
-        "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-403",
-        "TRA-404",
+        "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-405",
+        "TRA-403", "TRA-404",
     ]
 
 
@@ -107,7 +113,7 @@ def test_output_has_the_payment_detail_columns():
     assert sheet.title == "Hoja1"
     assert [c.value for c in sheet[1]] == DETAIL_COLUMNS
     assert [a.rule for a in result.audit.transformations] == [
-        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-403", "TRA-404",
+        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405", "TRA-403", "TRA-404",
     ]
 
 
@@ -122,13 +128,13 @@ def test_ety_values_are_copied_row_by_row_without_changes():
         for ety_column, detail_column in COLUMN_MAPPING.items():
             cell = sheet.cell(row, DETAIL_COLUMNS.index(detail_column) + 1)
             expected = record[ety_column]
-            if detail_column in ("IDENTIFICACION", "SUBFIDEICOMISO"):
+            if detail_column in ("IDENTIFICACION", "SUBFIDEICOMISO", "CUENTA"):
                 expected = int(expected)   # Se escribe como número (ver test_identification_is_written_as_number)
             if detail_column == "COMPROBANTE":
                 expected = f"656-{expected}"   # Con el prefijo (ver test_voucher_gets_the_656_prefix)
             assert cell.value == expected, (row, detail_column)
     # Las columnas sin correspondencia quedan vacías.
-    unmapped = [c for c in DETAIL_COLUMNS if c not in [*COLUMN_MAPPING.values(), "VALIDACION", "CONTRATO"]]
+    unmapped = [c for c in DETAIL_COLUMNS if c not in [*COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO"]]
     assert all(sheet.cell(2, DETAIL_COLUMNS.index(c) + 1).value is None for c in unmapped)
     assert "2 registros del reporte ETY copiados" in "\n".join(result.audit.step_lines())
 
@@ -154,6 +160,8 @@ def test_new_columns_are_mapped():
     assert COLUMN_MAPPING["Nº Sec Doc"] == "NO_SEC_DOC"
     assert COLUMN_MAPPING["Más Info"] == "CONCEPTO"
     assert COLUMN_MAPPING["Subfideicomiso"] == "SUBFIDEICOMISO"
+    assert COLUMN_MAPPING["Cuenta"] == "CUENTA"
+    assert COLUMN_MAPPING["Programa"] == "PROGRAMA"
 
 
 def test_voucher_gets_the_656_prefix():
@@ -194,6 +202,25 @@ def test_contract_is_the_payment_detail_formula_over_concept():
     assert "{" not in formula and "V3" not in formula
     assert "V3" in sheet["O3"].value
     assert sheet["O2"].number_format == "General"
+
+
+def test_account_is_number_and_program_keeps_its_zeros():
+    sheet = output_sheet(run(stage_3_output()))
+    assert sheet["S2"].value == 4147 and sheet["S2"].data_type == "n"
+    assert sheet["AA2"].value == "0002"   # Con ceros a la izquierda: se copia como texto
+
+
+def test_fixed_values_are_assigned_to_every_record():
+    result = run(stage_3_output())
+    sheet = output_sheet(result)
+    for row in (2, 3):
+        assert sheet[f"W{row}"].value == "FIDUPREVISORA"
+        assert sheet[f"AB{row}"].value == 656 and sheet[f"AB{row}"].data_type == "n"
+        assert sheet[f"AC{row}"].value == "1" and sheet[f"AC{row}"].number_format == "@"
+        assert sheet[f"AE{row}"].value == 0 and sheet[f"AF{row}"].value == 0
+    assert sheet["AE2"].number_format == ACCOUNTING_FORMAT
+    lines = "\n".join(result.audit.step_lines())
+    assert "FIDUCIARIA_QUE_EFECTUO_EL_PAGO = «FIDUPREVISORA», GL = 656, Q_PAGOS = «1»" in lines
 
 
 def test_copied_values_take_the_payment_detail_cell_formats():

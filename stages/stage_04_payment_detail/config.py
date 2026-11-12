@@ -119,6 +119,8 @@ COLUMN_MAPPING = {
     "Nº Sec Doc": "NO_SEC_DOC",
     "Más Info": "CONCEPTO",
     "Subfideicomiso": "SUBFIDEICOMISO",
+    "Cuenta": "CUENTA",
+    "Programa": "PROGRAMA",
 }
 
 # Texto que se antepone al copiar el valor de una columna (columna del Detalle de pago: prefijo).
@@ -161,7 +163,19 @@ FORMULA_COLUMNS = [
 # se escriben como número, para que Excel no los marque como «Número almacenado como texto».
 # Solo los valores formados únicamente por dígitos y sin ceros a la izquierda; los demás se
 # copian como texto, para no cambiar lo que se ve.
-NUMBER_COLUMNS = ["IDENTIFICACION", "SUBFIDEICOMISO"]
+NUMBER_COLUMNS = ["IDENTIFICACION", "SUBFIDEICOMISO", "CUENTA"]
+
+# Valor fijo que se asigna a todos los registros en estas columnas del Detalle de pago (el
+# mismo de todos los registros anteriores del Detalle de pago). Se escriben con el tipo que
+# tienen allí: GL, AMORTIZACION_ANTICIPO y MULTA como número; Q_PAGOS como texto (su columna
+# tiene formato de texto).
+FIXED_VALUES = {
+    "FIDUCIARIA_QUE_EFECTUO_EL_PAGO": "FIDUPREVISORA",
+    "GL": 656,
+    "Q_PAGOS": "1",
+    "AMORTIZACION_ANTICIPO": 0,
+    "MULTA": 0,
+}
 
 # Reglas propias de la etapa (serie 4xx).
 RULES = {
@@ -174,9 +188,13 @@ RULES = {
         "Identificación → IDENTIFICACION, Tercero Principal → TERCERO, FECHA DE PAGO → FECHA_DE_PAGO, "
         "VR. BRUTO → VR_BRUTO, VR. RTEFTE → VR_RTEFTE, VR. RETEIVA → VR_RETEIVA, VR. RETEICA → VR_RETEICA, "
         "VR. TASAS → VR_TASAS, Importe → VR_NETO, Asiento → ASIENTO, Comprobante → COMPROBANTE (con el "
-        "prefijo «656-»), Nº Sec Doc → NO_SEC_DOC, Más Info → CONCEPTO y Subfideicomiso → SUBFIDEICOMISO. "
-        "IDENTIFICACION y SUBFIDEICOMISO se escriben como número (si tienen solo dígitos y no empiezan "
-        "por cero). Las demás columnas quedan vacías"
+        "prefijo «656-»), Nº Sec Doc → NO_SEC_DOC, Más Info → CONCEPTO, Subfideicomiso → SUBFIDEICOMISO, Cuenta → CUENTA "
+        "y Programa → PROGRAMA. IDENTIFICACION, SUBFIDEICOMISO y CUENTA se escriben como número (si tienen "
+        "solo dígitos y no empiezan por cero)"
+    ),
+    "TRA-405": (
+        "Asignar a todos los registros los valores fijos del Detalle de pago: FIDUCIARIA_QUE_EFECTUO_EL_PAGO "
+        "«FIDUPREVISORA», GL 656, Q_PAGOS «1», AMORTIZACION_ANTICIPO 0 y MULTA 0"
     ),
     "TRA-403": (
         "Calcular VALIDACION con la misma fórmula de Diferencia del ETY: VR_BRUTO - VR_RTEFTE - VR_RETEIVA "
@@ -184,7 +202,8 @@ RULES = {
     ),
     "TRA-404": (
         "Calcular CONTRATO con la fórmula del Detalle de pago, que toma de CONCEPTO el número que sigue "
-        "a «CONTRATO» (por ejemplo, «..._CONTRATO_303-2026_...» -> 303; fórmula de Excel en cada fila)"
+        "a «CONTRATO» (por ejemplo, «..._CONTRATO_303-2026_...» -> 303; fórmula de Excel en cada fila). "
+        "Las demás columnas del Detalle de pago quedan vacías"
     ),
 }
 

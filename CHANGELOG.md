@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 4: se copian también Cuenta → CUENTA (como número) y Programa → PROGRAMA (como texto, con sus ceros). Todos los registros llevan los valores fijos del Detalle de pago: FIDUCIARIA_QUE_EFECTUO_EL_PAGO «FIDUPREVISORA», GL 656, Q_PAGOS «1», AMORTIZACION_ANTICIPO 0 y MULTA 0 (regla TRA-405).
 - Etapa 4: se copian también Más Info → CONCEPTO y Subfideicomiso → SUBFIDEICOMISO (como número, igual que IDENTIFICACION). CONTRATO se escribe en cada fila con la fórmula del Detalle de pago, que toma de CONCEPTO el número de contrato (regla TRA-404).
 - Etapa 4: se copian también Asiento → ASIENTO, Comprobante → COMPROBANTE (con el prefijo «656-») y Nº Sec Doc → NO_SEC_DOC. VALIDACION (la Diferencia del ETY) se escribe en cada fila con la misma fórmula de Diferencia (`=E2-F2-G2-H2-I2-J2`, regla TRA-403), porque el resultado de esa fórmula no queda guardado en el archivo del ETY y no se puede copiar.
 - Etapa 4: IDENTIFICACION se escribe como número en el Detalle de pago, para que Excel no la marque como «Número almacenado como texto». Los valores con otros caracteres o ceros a la izquierda se dejan como texto y se cuentan en el log.

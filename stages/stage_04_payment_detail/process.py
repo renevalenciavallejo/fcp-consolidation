@@ -12,6 +12,7 @@ from core.settings import SOURCE_FILE, SOURCE_ROW
 from core.writer import ExcelFormula
 from stages.stage_04_payment_detail.config import (
     COLUMN_MAPPING,
+    FIXED_VALUES,
     FORMULA_COLUMNS,
     NUMBER_COLUMNS,
     OUTPUT_LAYOUT,
@@ -25,6 +26,8 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     detail = empty_payment_detail(ety, audit)
     audit.step("Copiando los datos del reporte ETY al Detalle de pago")
     detail = copy_ety_values(ety, detail, audit)
+    audit.step("Asignando los valores fijos del Detalle de pago")
+    assign_fixed_values(detail, audit)
     for formula in FORMULA_COLUMNS:
         audit.step(f"Calculando {formula['column']}")
         add_formula(detail, formula, audit)
@@ -79,6 +82,23 @@ def add_prefix(detail: pd.DataFrame, column: str, prefix: str, audit: AuditLog) 
     detail[column] = detail[column].map(with_prefix)
     filled = int((~detail[column].map(is_empty)).sum())
     audit.transformation("TRA-402", f"{column}: prefijo «{prefix}» agregado a {filled} valores")
+
+
+def assign_fixed_values(detail: pd.DataFrame, audit: AuditLog) -> None:
+    """Asigna a todos los registros el valor fijo de cada columna de FIXED_VALUES. Regla TRA-405.
+
+    Son los valores que tienen todos los registros del Detalle de pago (por ejemplo, la
+    fiduciaria FIDUPREVISORA y el GL 656).
+    """
+    for column, value in FIXED_VALUES.items():
+        detail[column] = [value] * len(detail)
+    values = ", ".join(f"{column} = {_shown(value)}" for column, value in FIXED_VALUES.items())
+    audit.transformation("TRA-405", f"Valores fijos en {len(detail)} registros: {values}")
+
+
+def _shown(value: object) -> str:
+    """Valor para el log: los textos entre comillas («1») para distinguirlos de los números (1)."""
+    return f"«{value}»" if isinstance(value, str) else str(value)
 
 
 def add_formula(detail: pd.DataFrame, formula: dict, audit: AuditLog) -> None:
