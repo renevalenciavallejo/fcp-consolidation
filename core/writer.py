@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.cell.cell import Cell
-from openpyxl.styles import Alignment, Border, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -76,6 +76,45 @@ class SheetStyle:
     header: dict[str, CellStyle] = field(default_factory=dict)   # Celda del encabezado
     data: dict[str, CellStyle] = field(default_factory=dict)     # Primera celda de datos
     widths: dict[str, float] = field(default_factory=dict)       # Ancho de la columna
+    header_height: float | None = None                           # Alto de la fila de encabezados
+    # También aplica fuente, alineación y formato de número a la columna completa, para que
+    # los valores que el usuario escriba o pegue en filas nuevas tomen el formato (un archivo
+    # plantilla, que puede salir sin datos).
+    style_whole_columns: bool = False
+
+
+# Borde fino en los cuatro lados de la celda.
+THIN_SIDE = Side(style="thin")
+THIN_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN_SIDE)
+
+
+def layout_style(layout: dict) -> SheetStyle:
+    """Apariencia de un archivo de salida definida por la etapa (OUTPUT_LAYOUT en su config.py).
+
+    Sirve cuando la salida debe tener el formato de otro archivo (por ejemplo, el Detalle
+    de pago) y no el del archivo cargado. Encabezados y datos llevan bordes finos; los
+    encabezados van centrados y con ajuste de texto.
+    """
+    header, data = layout["header"], layout["data"]
+    style = SheetStyle(layout["sheet_name"], header_height=layout.get("header_height"), style_whole_columns=True)
+    for column, settings in layout["columns"].items():
+        fill = settings.get("header_fill", header["fill"])
+        style.header[column] = CellStyle(
+            Font(name=header["font"], size=header["size"], bold=header.get("bold", False), color=header["color"]),
+            PatternFill("solid", start_color=fill, end_color=fill),
+            THIN_BORDER,
+            Alignment(horizontal="center", vertical="center", wrap_text=True),
+            GENERAL_FORMAT,
+        )
+        style.data[column] = CellStyle(
+            Font(name=data["font"], size=data["size"]),
+            PatternFill(),
+            THIN_BORDER,
+            Alignment(horizontal=settings.get("align")),
+            settings.get("format", GENERAL_FORMAT),
+        )
+        style.widths[column] = settings["width"]
+    return style
 
 
 def capture_style(sheet: Worksheet, header_row: int, positions: dict[str, int]) -> SheetStyle:
@@ -137,6 +176,8 @@ def write_table(
             _apply_style(cell, header_styles[column])
         elif style is None:
             cell.font = Font(bold=True)
+    if style and style.header_height:
+        sheet.row_dimensions[1].height = style.header_height
 
     letters = {column: get_column_letter(i + 1) for i, column in enumerate(columns)}
     for row_number, values in enumerate(df.itertuples(index=False), start=2):
@@ -173,6 +214,20 @@ def write_table(
         for i, column in enumerate(columns):
             if column in style.widths:
                 sheet.column_dimensions[get_column_letter(i + 1)].width = style.widths[column]
+    if style and style.style_whole_columns:
+        _style_whole_columns(sheet, columns, data_styles)
+
+
+def _style_whole_columns(sheet: Worksheet, columns: list[str], data_styles: dict[str, CellStyle | None]) -> None:
+    """Fuente, alineación y formato de número de cada columna completa, sin bordes ni relleno
+    (que se verían en toda la hoja). Excel los aplica a las celdas nuevas de la columna."""
+    for i, column in enumerate(columns):
+        original = data_styles[column]
+        if original:
+            dimension = sheet.column_dimensions[get_column_letter(i + 1)]
+            dimension.font = original.font
+            dimension.alignment = original.alignment
+            dimension.number_format = original.number_format
 
 
 def to_bytes(workbook: Workbook) -> bytes:

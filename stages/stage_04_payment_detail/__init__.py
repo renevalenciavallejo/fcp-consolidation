@@ -1,0 +1,17 @@
+"""Etapa 4 - Integración al Detalle de pago."""
+
+from stages.stage_04_payment_detail import config
+from stages.stage_04_payment_detail.process import process
+
+NAME = "Etapa 4 - Integración al Detalle de pago"
+DESCRIPTION = (
+    "Genera, a partir del reporte ETY procesado en la Etapa 3, un archivo con la estructura y el "
+    "formato del Detalle de pago, para importarlo manualmente. Por ahora el archivo sale sin datos."
+)
+INPUTS = config.INPUTS
+RULES = config.RULES
+APPLIED_RULES = config.APPLIED_RULES
+# El archivo de salida toma la estructura y el formato del Detalle de pago, no los del reporte ETY.
+OUTPUT_LAYOUT = config.OUTPUT_LAYOUT
+
+__all__ = ["NAME", "DESCRIPTION", "INPUTS", "RULES", "APPLIED_RULES", "OUTPUT_LAYOUT", "process"]

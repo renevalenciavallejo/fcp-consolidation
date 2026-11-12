@@ -22,7 +22,7 @@ from core.log_report import InputFileInfo, RunSummary, build_log
 from core.reader import ReadResult, combine, file_name, read_file
 from core.settings import CURRENCY_FORMAT_EXCEL, DATE_FORMAT_TEXT, INPUT_DATE, OUTPUT_DIR
 from core.stage import InputSpec, applied_rules, date_label, input_specs, stage_prefix, stage_rules
-from core.writer import SheetStyle, build_output
+from core.writer import SheetStyle, build_output, layout_style
 
 class StageError(Exception):
     """Problema que impide procesar (estructura inválida, archivos faltantes).
@@ -153,8 +153,12 @@ def run_stage(
     input_files = [
         InputFileInfo(spec.label, r.file_name, r.rows) for spec in specs for r in read_results[spec.key]
     ]
+    # Si la etapa define el formato de su salida (OUTPUT_LAYOUT), se usa ese y no el del archivo cargado.
+    layout = getattr(stage, "OUTPUT_LAYOUT", None)
     output_bytes = build_output(
-        output, audit.findings, output_formats(specs), output_style(read_results),
+        output, audit.findings,
+        {} if layout else output_formats(specs),
+        layout_style(layout) if layout else output_style(read_results),
         getattr(stage, "RULE_FILLS", {}),
     )
     summary = RunSummary(

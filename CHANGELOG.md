@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 4 – Integración al Detalle de pago: carga y validación de la estructura del reporte ETY procesado en la Etapa 3 (25 columnas en orden, encabezados en la fila 1; advertencia si el nombre no contiene `E03_procesado`). Procesar genera, por ahora sin datos, un archivo con la estructura y el formato del Detalle de pago (34 columnas, encabezados azules y verdes, anchos y formatos de celda; regla TRA-401). Nueva opción de etapa `OUTPUT_LAYOUT`: formato propio del archivo de salida, en lugar del formato del archivo cargado.
 - Las celdas con hallazgos Error se resaltan con un rojo más fuerte, en todas las etapas, para que se distingan mejor.
 - Etapa 1: al final se valida que cada Cuenta pertenezca a su Subfideicomiso, según el Excel «RELACIÓN SUBCUENTAS Y CUENTAS BANCARIAS» (regla VAL-102). Si no están relacionados o falta alguno de los dos, la celda de Cuenta queda en rojo, aunque esté vacía, y el hallazgo Error queda en Acciones. No detiene el procesamiento ni cambia valores.
 - La interfaz abre en tema oscuro la primera vez en cada navegador. El usuario puede cambiarlo en el menú de la aplicación (⋮) y su elección se conserva.
