@@ -2,13 +2,17 @@
 
 from io import BytesIO
 
+import pandas as pd
+
 import pytest
 from openpyxl import load_workbook
 
+from core.audit import AuditLog
 from core.runner import StageError, file_name_warnings, run_stage, validate_input
-from core.stage import applied_rules, input_specs
+from core.stage import applied_rules, input_specs, stage_rules
 from stages import STAGES, stage_03_ap_voucher_validation, stage_04_payment_detail
-from stages.stage_04_payment_detail.config import ACCOUNTING_FORMAT, DATE_FORMAT, OUTPUT_LAYOUT
+from stages.stage_04_payment_detail.config import ACCOUNTING_FORMAT, COLUMN_MAPPING, DATE_FORMAT, OUTPUT_LAYOUT
+from stages.stage_04_payment_detail.process import add_prefix, as_number
 from tests.helpers import make_xlsx
 from tests.test_stage_01_ety_cleaning import OUTPUT_COLUMNS, ety_file
 from tests.test_stage_03_ap_voucher_validation import run as run_stage_3
@@ -91,17 +95,90 @@ def test_ety_is_validated_on_upload():
 
 def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_04_payment_detail)]
-    assert codes == ["EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401"]
+    assert codes == [
+        "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-403",
+    ]
 
 
-def test_output_has_the_payment_detail_columns_and_no_data():
+def test_output_has_the_payment_detail_columns():
     result = run(stage_3_output())
     sheet = output_sheet(result)
     assert sheet.title == "Hoja1"
     assert [c.value for c in sheet[1]] == DETAIL_COLUMNS
-    assert sheet.max_row == 1
-    assert result.summary.rows_output == 0
-    assert [a.rule for a in result.audit.transformations] == ["TRA-401"]
+    assert [a.rule for a in result.audit.transformations] == ["TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-403"]
+
+
+def test_ety_values_are_copied_row_by_row_without_changes():
+    ety = validate_input(stage_04_payment_detail, "ety_processed", [stage_3_output()])
+    result = run(stage_3_output())
+    sheet = output_sheet(result)
+    assert result.summary.rows_output == len(ety) == 2
+    assert sheet.max_row == 3
+    for position, (_, record) in enumerate(ety.iterrows()):
+        row = position + 2
+        for ety_column, detail_column in COLUMN_MAPPING.items():
+            cell = sheet.cell(row, DETAIL_COLUMNS.index(detail_column) + 1)
+            expected = record[ety_column]
+            if detail_column == "IDENTIFICACION":
+                expected = int(expected)   # Se escribe como número (ver test_identification_is_written_as_number)
+            if detail_column == "COMPROBANTE":
+                expected = f"656-{expected}"   # Con el prefijo (ver test_voucher_gets_the_656_prefix)
+            assert cell.value == expected, (row, detail_column)
+    # Las columnas sin correspondencia quedan vacías.
+    unmapped = [c for c in DETAIL_COLUMNS if c not in [*COLUMN_MAPPING.values(), "VALIDACION"]]
+    assert all(sheet.cell(2, DETAIL_COLUMNS.index(c) + 1).value is None for c in unmapped)
+    assert "2 registros del reporte ETY copiados" in "\n".join(result.audit.step_lines())
+
+
+def test_identification_is_written_as_number():
+    result = run(stage_3_output())
+    sheet = output_sheet(result)
+    assert sheet["B2"].value == 12345678 and sheet["B2"].data_type == "n"
+    assert "IDENTIFICACION: 2 valores escritos como número" in "\n".join(result.audit.step_lines())
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("1085283965", 1085283965), ("0012345", "0012345"), ("900123456-1", "900123456-1"), (None, None), (77178085, 77178085)],
+)
+def test_only_plain_digits_become_numbers(value, expected):
+    assert as_number(value) == expected
+
+
+def test_new_columns_are_mapped():
+    assert COLUMN_MAPPING["Asiento"] == "ASIENTO"
+    assert COLUMN_MAPPING["Comprobante"] == "COMPROBANTE"
+    assert COLUMN_MAPPING["Nº Sec Doc"] == "NO_SEC_DOC"
+
+
+def test_voucher_gets_the_656_prefix():
+    result = run(stage_3_output())
+    sheet = output_sheet(result)
+    assert [sheet["M2"].value, sheet["M3"].value] == ["656-00000101", "656-00000102"]
+    assert "COMPROBANTE: prefijo «656-» agregado a 2 valores" in "\n".join(result.audit.step_lines())
+
+
+@pytest.mark.parametrize(("value", "expected"), [("00153414", "656-00153414"), ("656-00153414", "656-00153414"), (None, None)])
+def test_prefix_is_added_once_and_empty_stays_empty(value, expected):
+    detail = pd.DataFrame({"COMPROBANTE": [value]}, dtype=object)
+    add_prefix(detail, "COMPROBANTE", "656-", AuditLog(stage_rules(stage_04_payment_detail)))
+    assert detail["COMPROBANTE"][0] == expected
+
+
+def test_validation_is_the_difference_formula_of_each_row():
+    sheet = output_sheet(run(stage_3_output()))
+    assert sheet["K2"].value == "=E2-F2-G2-H2-I2-J2"
+    assert sheet["K3"].value == "=E3-F3-G3-H3-I3-J3"
+    assert sheet["K2"].number_format == ACCOUNTING_FORMAT
+
+
+def test_copied_values_take_the_payment_detail_cell_formats():
+    sheet = output_sheet(run(stage_3_output()))
+    assert sheet["D2"].number_format == DATE_FORMAT
+    assert all(sheet[f"{letter}2"].number_format == ACCOUNTING_FORMAT for letter in "EFGHIJ")
+    assert sheet["B2"].alignment.horizontal == "center"
+    assert sheet["C2"].border.left.style == "thin"
+    assert sheet["Q2"].border.left.style == "thin"   # También las columnas vacías
 
 
 def test_output_has_the_payment_detail_format():

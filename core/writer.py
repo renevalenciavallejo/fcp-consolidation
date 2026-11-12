@@ -196,7 +196,10 @@ def write_table(
                     cell.number_format = formula_formats[column]
                 continue
             is_number = isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool)
-            if column in formats and is_number:
+            if style and style.style_whole_columns and original:
+                # Formato definido por la etapa (OUTPUT_LAYOUT): es el del archivo destino y prevalece.
+                cell.number_format = original.number_format
+            elif column in formats and is_number:
                 cell.number_format = formats[column]
             elif isinstance(cell.value, (datetime, date)):
                 cell.number_format = DATE_FORMAT_EXCEL

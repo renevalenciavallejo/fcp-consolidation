@@ -102,11 +102,57 @@ OUTPUT_LAYOUT = {
     },
 }
 
+# Columnas del reporte ETY que se copian, fila por fila y sin cambios, a la columna del
+# Detalle de pago indicada. Las demás columnas del Detalle de pago quedan vacías.
+COLUMN_MAPPING = {
+    "Identificación": "IDENTIFICACION",
+    "Tercero Principal": "TERCERO",
+    "FECHA DE PAGO": "FECHA_DE_PAGO",
+    "VR. BRUTO": "VR_BRUTO",
+    "VR. RTEFTE": "VR_RTEFTE",
+    "VR. RETEIVA": "VR_RETEIVA",
+    "VR. RETEICA": "VR_RETEICA",
+    "VR. TASAS": "VR_TASAS",
+    "Importe": "VR_NETO",
+    "Asiento": "ASIENTO",
+    "Comprobante": "COMPROBANTE",
+    "Nº Sec Doc": "NO_SEC_DOC",
+}
+
+# Texto que se antepone al copiar el valor de una columna (columna del Detalle de pago: prefijo).
+# El Detalle de pago identifica el comprobante con el código del negocio: 00153414 -> 656-00153414.
+VALUE_PREFIXES = {"COMPROBANTE": "656-"}
+
+# Diferencia del ETY -> VALIDACION. En el ETY, Diferencia es una fórmula de Excel (regla TRA-101
+# de la Etapa 1) cuyo resultado no queda guardado en el archivo hasta que se abre y guarda en
+# Excel, así que no se puede copiar su valor. VALIDACION se escribe con la misma fórmula, sobre
+# las columnas ya copiadas de la misma fila (como en el Detalle de pago: =+E2-F2-G2-H2-I2-J2).
+VALIDATION_COLUMN = "VALIDACION"
+VALIDATION_FORMULA = "={VR_BRUTO}-{VR_RTEFTE}-{VR_RETEIVA}-{VR_RETEICA}-{VR_TASAS}-{VR_NETO}"
+
+# Columnas del Detalle de pago donde los números que en el ETY vienen como texto (códigos)
+# se escriben como número, para que Excel no los marque como «Número almacenado como texto».
+# Solo los valores formados únicamente por dígitos y sin ceros a la izquierda; los demás se
+# copian como texto, para no cambiar lo que se ve.
+NUMBER_COLUMNS = ["IDENTIFICACION"]
+
 # Reglas propias de la etapa (serie 4xx).
 RULES = {
     "TRA-401": (
         "Generar el archivo con la estructura y el formato del Detalle de pago (columnas, encabezados, "
-        "estilos, anchos y formatos de celda). Por ahora el archivo sale sin datos"
+        "estilos, anchos y formatos de celda)"
+    ),
+    "TRA-402": (
+        "Copiar los valores del reporte ETY, fila por fila y sin cambios, a las columnas del Detalle de pago: "
+        "Identificación → IDENTIFICACION, Tercero Principal → TERCERO, FECHA DE PAGO → FECHA_DE_PAGO, "
+        "VR. BRUTO → VR_BRUTO, VR. RTEFTE → VR_RTEFTE, VR. RETEIVA → VR_RETEIVA, VR. RETEICA → VR_RETEICA, "
+        "VR. TASAS → VR_TASAS, Importe → VR_NETO, Asiento → ASIENTO, Comprobante → COMPROBANTE (con el "
+        "prefijo «656-») y Nº Sec Doc → NO_SEC_DOC. IDENTIFICACION se escribe como número (si tiene "
+        "solo dígitos y no empieza por cero). Las demás columnas quedan vacías"
+    ),
+    "TRA-403": (
+        "Calcular VALIDACION con la misma fórmula de Diferencia del ETY: VR_BRUTO - VR_RTEFTE - VR_RETEIVA "
+        "- VR_RETEICA - VR_TASAS - VR_NETO (fórmula de Excel en cada fila)"
     ),
 }
 

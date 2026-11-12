@@ -23,7 +23,7 @@ Las etapas se hacen en orden. El archivo procesado de una etapa es el que se car
 | 1. Limpieza del reporte ETY | Reporte ETY de pagos | Reporte limpio, sin duplicados y con la columna Diferencia (`..._E01_procesado.xlsx`) |
 | 2. Conciliación de pagos | Reporte de la Etapa 1 y un informe de pago de Tesorería por cada fecha de pago | Reporte con los comprobantes que no están en Tesorería señalados (`..._E02_procesado.xlsx`) |
 | 3. Cruce con el AP Voucher | Reporte de la Etapa 2 y el AP Voucher | Reporte con los comprobantes cerrados o cancelados señalados (`..._E03_procesado.xlsx`) |
-| 4. Integración al Detalle de pago | Reporte de la Etapa 3 | Archivo con la estructura y el formato del Detalle de pago, por ahora sin datos (`..._E04_procesado.xlsx`) |
+| 4. Integración al Detalle de pago | Reporte de la Etapa 3 | Archivo con la estructura y el formato del Detalle de pago y los datos del ETY (`..._E04_procesado.xlsx`) |
 
 En todas las etapas, lo primero es revisar la estructura de cada archivo (hoja, encabezados, columnas y su orden). Si algo no corresponde, la herramienta se detiene sin generar resultados y explica qué falta y dónde. Cada etapa también guarda un **log** en Excel con todo lo que se hizo.
 
@@ -69,7 +69,7 @@ Al terminar, una notificación lista los comprobantes encontrados de cada caso. 
 
 ### Etapa 4 – Integración al Detalle de pago
 
-Se carga el reporte procesado en la Etapa 3. Al presionar Procesar, la herramienta genera un archivo con las columnas, encabezados, anchos y formatos del **Detalle de pago**, para importarlo manualmente a ese archivo. Por ahora el archivo sale **sin datos**; la integración de los registros se agregará más adelante.
+Se carga el reporte procesado en la Etapa 3. Al presionar Procesar, la herramienta genera un archivo con las columnas, encabezados, anchos y formatos del **Detalle de pago**, para importarlo manualmente a ese archivo. Debajo de los encabezados se copian, fila por fila y sin cambios, Identificación, Tercero Principal, FECHA DE PAGO, los valores (VR. BRUTO a VR. TASAS), Importe (como VR_NETO), Asiento, Comprobante (con el prefijo «656-») y Nº Sec Doc, con el formato de fecha y moneda del Detalle de pago. VALIDACION se calcula con la misma fórmula de Diferencia. Las demás columnas quedan vacías por ahora.
 
 ---
 

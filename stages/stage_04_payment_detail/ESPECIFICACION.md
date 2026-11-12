@@ -2,7 +2,7 @@
 
 Objetivo: integrar la información del reporte ETY procesado en la Etapa 3 al archivo **Detalle de pago**. La etapa genera un archivo con la misma estructura y el mismo formato del Detalle de pago, que el usuario importa después manualmente a ese archivo.
 
-**Estado actual:** se carga y valida el reporte ETY y se genera el archivo con la estructura y el formato del Detalle de pago, **sin datos**. La integración de los registros se agregará cuando se especifique.
+**Estado actual:** se carga y valida el reporte ETY y se genera el archivo con la estructura y el formato del Detalle de pago, con los valores de 12 columnas del ETY copiados fila por fila y VALIDACION calculada con la fórmula de Diferencia. Las demás columnas se agregarán cuando se especifiquen.
 
 ## Archivo de entrada
 
@@ -42,14 +42,43 @@ El reporte se valida apenas se carga. Si no cumple, los errores aparecen debajo 
 
 ### Paso 2 – Archivo con el formato del Detalle de pago (TRA-401, implementado)
 
-Se genera el archivo de salida con la estructura y el formato del Detalle de pago (tomados de `DetallePagoEjemploFormato.xlsx`). Por ahora **sin datos**: solo la fila de encabezados.
+Se genera el archivo de salida con la estructura y el formato del Detalle de pago (tomados de `DetallePagoEjemploFormato.xlsx`), con una fila por cada registro del reporte ETY, en el mismo orden.
+
+### Paso 3 – Copia de los datos del ETY (TRA-402, implementado)
+
+El prefijo «656-» se agrega a cada Comprobante no vacío (si ya lo trae, no se repite); los vacíos quedan vacíos.
+
+Debajo de los encabezados, los valores del reporte ETY se copian fila por fila, **sin modificarlos**, según esta correspondencia:
+
+| Reporte ETY | Detalle de pago |
+| --- | --- |
+| B (Identificación) | B (IDENTIFICACION) |
+| C (Tercero Principal) | C (TERCERO) |
+| D (FECHA DE PAGO) | D (FECHA_DE_PAGO) |
+| E (VR. BRUTO) | E (VR_BRUTO) |
+| F (VR. RTEFTE) | F (VR_RTEFTE) |
+| G (VR. RETEIVA) | G (VR_RETEIVA) |
+| H (VR. RETEICA) | H (VR_RETEICA) |
+| I (VR. TASAS) | I (VR_TASAS) |
+| J (Importe) | J (VR_NETO) |
+| L (Asiento) | L (ASIENTO) |
+| O (Comprobante) | M (COMPROBANTE), con el prefijo «656-» (`00153414` → `656-00153414`) |
+| Q (Nº Sec Doc) | N (NO_SEC_DOC) |
+
+IDENTIFICACION se escribe como **número** (el ETY la trae como texto), para que Excel no la marque como «Número almacenado como texto»; lo que se ve no cambia. Solo se convierten los valores con únicamente dígitos y sin ceros a la izquierda; los demás (por ejemplo, con guion) se copian como texto y el log indica cuántos son.
+
+Las fechas y los valores se copian como fecha y número; se ven con el formato de la columna destino del Detalle de pago (fecha `d/mm/aaaa` y contabilidad en pesos), no con el del ETY. Las demás columnas del Detalle de pago quedan vacías (con su formato y bordes). El log de ejecución indica cuántos registros se copiaron.
+
+### Paso 4 – VALIDACION (TRA-403, implementado)
+
+La columna K (Diferencia) del ETY corresponde a K (VALIDACION). En el ETY, Diferencia es una fórmula de Excel (regla TRA-101 de la Etapa 1) y su resultado no queda guardado en el archivo mientras no se abra y guarde en Excel, así que su valor no se puede copiar. VALIDACION se escribe en cada fila con la misma fórmula sobre las columnas copiadas: `=E2-F2-G2-H2-I2-J2` (VR_BRUTO − VR_RTEFTE − VR_RETEIVA − VR_RETEICA − VR_TASAS − VR_NETO), igual a la del Detalle de pago. El resultado aparece al abrir el archivo en Excel, con formato de contabilidad en pesos.
 
 ## Archivo de salida
 
 - Hoja `Hoja1` con las 34 columnas del Detalle de pago, en este orden: ITEM, IDENTIFICACION, TERCERO, FECHA_DE_PAGO, VR_BRUTO, VR_RTEFTE, VR_RETEIVA, VR_RETEICA, VR_TASAS, VR_NETO, VALIDACION, ASIENTO, COMPROBANTE, NO_SEC_DOC, CONTRATO, VIGENCIA, SUBFIDEICOMISO, NOMBRE_SUBFIDEICOMISO_PAGO, CUENTA, TIPO_DE_PAGO, NO_BENEFICIARIOS, CONCEPTO, FIDUCIARIA_QUE_EFECTUO_EL_PAGO, INFORME_SEMANAL, PERIODO_DE_COBRO, RECURSOS, PROGRAMA, GL, Q_PAGOS, CONTRATO_2, AMORTIZACION_ANTICIPO, MULTA, FUENTE_DE_RECURSOS, RANGO.
 - Encabezados: Calibri 11 en negrita, letra blanca sobre azul (verde en VIGENCIA y PROGRAMA), centrados, con ajuste de texto y bordes finos; fila de 58 de alto.
 - Anchos de columna iguales a los del Detalle de pago.
-- Formatos de celda de cada columna (para los datos que se agreguen): ITEM con número entero, FECHA_DE_PAGO como fecha (`d/mm/aaaa`), los valores (VR_BRUTO a VALIDACION, AMORTIZACION_ANTICIPO y MULTA) con formato de contabilidad en pesos, Q_PAGOS como texto y las demás generales; Calibri 11 y centrados, salvo TERCERO, VR_BRUTO a VR_NETO y CONCEPTO.
+- Formatos de celda de cada columna (en las filas copiadas y en la columna completa, para los datos que se agreguen): ITEM con número entero, FECHA_DE_PAGO como fecha (`d/mm/aaaa`), los valores (VR_BRUTO a VALIDACION, AMORTIZACION_ANTICIPO y MULTA) con formato de contabilidad en pesos, Q_PAGOS como texto y las demás generales; Calibri 11 y centrados, salvo TERCERO, VR_BRUTO a VR_NETO y CONCEPTO.
 - Como en todas las etapas, la fila de encabezados queda inmovilizada y con filtros.
 - Nombre: el del reporte ETY con `E03_procesado` cambiado por `E04_procesado` (`ETY_sept_E03_procesado.xlsx` → `ETY_sept_E04_procesado.xlsx`); el log, con `E04_log`.
 
@@ -57,8 +86,8 @@ La configuración de este formato está en `OUTPUT_LAYOUT` (`config.py`). El arc
 
 ## Tareas manuales
 
-- Importar el archivo generado al Detalle de pago (por ahora sin datos).
+- Completar las columnas que la herramienta deja vacías e importar el archivo generado al Detalle de pago.
 
 ## Pendiente por especificar
 
-- Cómo se llena cada columna del Detalle de pago a partir del reporte ETY (incluidas las fórmulas de ITEM, VALIDACION, CONTRATO y CONTRATO_2 del ejemplo) y las columnas que no vienen del ETY.
+- Cómo se llenan las demás columnas del Detalle de pago (incluidas las fórmulas de ITEM, CONTRATO y CONTRATO_2 del ejemplo).
