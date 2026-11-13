@@ -231,6 +231,55 @@ SUBTRUST_NAMES = {
     "2054": "SERVICIO SOCIAL PARA LA PAZ",
 }
 
+# Relación Subfideicomiso -> recursos (RECURSOS). «PAC JULIO 2026» es el PAC vigente: cuando
+# cambie, se actualiza aquí en todos los Subfideicomisos que lo usan.
+SUBTRUST_RESOURCES = {
+    "1001": "PAC JULIO 2026",
+    "1002": "PAC JULIO 2026",
+    "1003": "PAC JULIO 2026",
+    "1004": "PAC JULIO 2026",
+    "1005": "PAC JULIO 2026",
+    "1006": "PAC JULIO 2026",
+    "1007": "PAC JULIO 2026",
+    "1008": "PAC JULIO 2026",
+    "1009": "PAC JULIO 2026",
+    "2010": "PAC JULIO 2026",
+    "2011": "PAC JULIO 2026",
+    "2013": "PAC BID PRESTAMO SEP2019",
+    "2016": "CENIT",
+    "2017": "PAC JULIO 2026",
+    "2018": "BID FACILIDAD",
+    "2019": "PAC JULIO 2026",
+    "2020": "KFW",
+    "2021": "AFD",
+    "2022": "BID FACILIDAD",
+    "2023": "VISIÓN AMAZONIA",
+    "2024": "PAC JULIO 2026",
+    "2025": "BID FACILIDAD",
+    "2026": "BID FACILIDAD",
+    "2027": "FONDO PAZ",
+    "2028": "FONDO PAZ",
+    "2029": "FONDO PAZ",
+    "2030": "FONDO PAZ",
+    "2031": "PAC JULIO 2026",
+    "2032": "FONDO PAZ",
+    "2033": "FONDO PAZ",
+    "2034": "OTROS RECURSOS ANT",
+    "2035": "CONVENIO IGAC 1231-23",
+    "2036": "CONVENIO ART-KFW",
+    "2038": "CONVENIO ADR 1141-24",
+    "2039": "CONVENIO MADR 2403-25",
+    "2041": "PAC JULIO 2026",
+    "2042": "PAC JULIO 2026",
+    "2043": "CONVENIO ANT 2428-24",
+    "2044": "CONVENIO UARIV 2420-24",
+    "2045": "CONVENIO RENHACEMOS",
+    "2047": "MIN TRABAJO 1638 -25",
+    "2048": "CONVENIO 1566-25 MEN",
+    "2049": "CONVENIO 1675 -25 DAFP",
+    "2054": "CONVENIO 764-26 MEN",
+}
+
 # Relación Subfideicomiso -> fuente de recursos (FUENTE_DE_RECURSOS).
 FUNDING_SOURCES = {
     "1001": "PGN",
@@ -284,6 +333,7 @@ FUNDING_SOURCES = {
 # la celda vacía y se informa en el log, para completarla manualmente.
 SUBTRUST_RELATIONS = [
     {"rule": "TRA-407", "column": "NOMBRE_SUBFIDEICOMISO_PAGO", "values": SUBTRUST_NAMES},
+    {"rule": "TRA-408", "column": "RECURSOS", "values": SUBTRUST_RESOURCES},
     {"rule": "TRA-406", "column": "FUENTE_DE_RECURSOS", "values": FUNDING_SOURCES},
 ]
 
@@ -312,6 +362,11 @@ RULES = {
     "TRA-407": (
         "Asignar NOMBRE_SUBFIDEICOMISO_PAGO según el SUBFIDEICOMISO de cada registro. Si el "
         "Subfideicomiso no está en la relación o está vacío, la celda queda vacía y se informa en el log"
+    ),
+    "TRA-408": (
+        "Asignar RECURSOS según el SUBFIDEICOMISO de cada registro (por ejemplo, PAC JULIO 2026, FONDO PAZ "
+        "o el convenio). Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y "
+        "se informa en el log"
     ),
     "TRA-406": (
         "Asignar FUENTE_DE_RECURSOS (PGN u OTROS) según el SUBFIDEICOMISO de cada registro. Si el "

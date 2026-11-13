@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 4: RECURSOS se asigna según el SUBFIDEICOMISO (regla TRA-408), con la relación de 44 Subfideicomisos (por ejemplo, PAC JULIO 2026, FONDO PAZ o el convenio). Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log lo indica.
 - Etapa 4: NOMBRE_SUBFIDEICOMISO_PAGO se asigna según el SUBFIDEICOMISO (regla TRA-407), con la relación de 44 Subfideicomisos, sin espacios al final. Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log lo indica.
 - Etapa 4: FUENTE_DE_RECURSOS se asigna según el SUBFIDEICOMISO (PGN u OTROS, regla TRA-406), con la relación de 44 Subfideicomisos. Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log lo indica.
 

@@ -104,8 +104,8 @@ def assign_fixed_values(detail: pd.DataFrame, audit: AuditLog) -> None:
 
 def assign_from_subtrust(detail: pd.DataFrame, relation: dict, audit: AuditLog) -> None:
     """Llena la columna con el valor que le corresponde al SUBFIDEICOMISO de cada registro,
-    según su relación (SUBTRUST_RELATIONS). Reglas TRA-406 (FUENTE_DE_RECURSOS) y TRA-407
-    (NOMBRE_SUBFIDEICOMISO_PAGO).
+    según su relación (SUBTRUST_RELATIONS). Reglas TRA-407 (NOMBRE_SUBFIDEICOMISO_PAGO),
+    TRA-408 (RECURSOS) y TRA-406 (FUENTE_DE_RECURSOS).
 
     El Subfideicomiso se compara como código (1002 y «1002» son el mismo). Si no está en
     la relación o está vacío, la celda queda vacía y el log lo indica con ✗, para que el

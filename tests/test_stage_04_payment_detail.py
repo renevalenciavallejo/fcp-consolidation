@@ -19,6 +19,7 @@ from stages.stage_04_payment_detail.config import (
     FUNDING_SOURCES,
     SUBTRUST_NAMES,
     SUBTRUST_RELATIONS,
+    SUBTRUST_RESOURCES,
     OUTPUT_LAYOUT,
 )
 from stages.stage_04_payment_detail.process import add_prefix, as_number, assign_from_subtrust
@@ -106,7 +107,7 @@ def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_04_payment_detail)]
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-405",
-        "TRA-407", "TRA-406", "TRA-403", "TRA-404",
+        "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404",
     ]
 
 
@@ -116,7 +117,8 @@ def test_output_has_the_payment_detail_columns():
     assert sheet.title == "Hoja1"
     assert [c.value for c in sheet[1]] == DETAIL_COLUMNS
     assert [a.rule for a in result.audit.transformations] == [
-        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405", "TRA-407", "TRA-406", "TRA-403", "TRA-404",
+        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405",
+        "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404",
     ]
 
 
@@ -137,8 +139,11 @@ def test_ety_values_are_copied_row_by_row_without_changes():
                 expected = f"656-{expected}"   # Con el prefijo (ver test_voucher_gets_the_656_prefix)
             assert cell.value == expected, (row, detail_column)
     # Las columnas sin correspondencia quedan vacías.
-    unmapped = [c for c in DETAIL_COLUMNS if c not in [*COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO", "FUENTE_DE_RECURSOS",
-                                                "NOMBRE_SUBFIDEICOMISO_PAGO"]]
+    filled = [
+        *COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO",
+        *[relation["column"] for relation in SUBTRUST_RELATIONS],
+    ]
+    unmapped = [c for c in DETAIL_COLUMNS if c not in filled]
     assert all(sheet.cell(2, DETAIL_COLUMNS.index(c) + 1).value is None for c in unmapped)
     assert "2 registros del reporte ETY copiados" in "\n".join(result.audit.step_lines())
 
@@ -253,6 +258,20 @@ def test_subtrust_names_have_the_same_44_subtrusts_and_no_trailing_spaces():
     assert all(name == name.strip() for name in SUBTRUST_NAMES.values())
     assert SUBTRUST_NAMES["2024"] == "NIÑEZ Y ADOLESCENCIA ICBF"
     assert SUBTRUST_NAMES["1003"] == SUBTRUST_NAMES["2045"] == "SUSTITUCION"
+
+
+def test_resources_come_from_the_subtrust():
+    result = run(stage_3_output())
+    sheet = output_sheet(result)
+    assert sheet["Q2"].value == 1002 and sheet["Z2"].value == "PAC JULIO 2026"
+    assert "RECURSOS asignada en 2 de 2 registros" in "\n".join(result.audit.step_lines())
+
+
+def test_resources_relation_has_the_same_44_subtrusts():
+    assert set(SUBTRUST_RESOURCES) == set(FUNDING_SOURCES)
+    assert SUBTRUST_RESOURCES["2016"] == "CENIT"
+    assert SUBTRUST_RESOURCES["2023"] == "VISIÓN AMAZONIA"
+    assert SUBTRUST_RESOURCES["2054"] == "CONVENIO 764-26 MEN"
 
 
 def test_unknown_or_empty_subtrust_leaves_funding_source_empty():
