@@ -4,6 +4,8 @@ La validación de estructura del reporte ETY la hace el ejecutor antes de llamar
 process(). Aquí van las reglas propias de la etapa, en el orden de ESPECIFICACION.md.
 """
 
+import re
+
 import pandas as pd
 
 from core.audit import AuditLog, is_empty
@@ -12,8 +14,14 @@ from core.settings import SOURCE_FILE, SOURCE_ROW
 from core.writer import ExcelFormula
 from stages.stage_04_payment_detail.config import (
     COLUMN_MAPPING,
+    CONCEPT_COLUMN,
+    CONTRACT_PREFIX,
+    CONTRACT_SEPARATORS,
+    CONTRACT_WORD,
+    VALIDITY_COLUMN,
     FIXED_VALUES,
     FORMULA_COLUMNS,
+    FORMULA_COLUMNS_AFTER_VALIDITY,
     MAX_SUBTRUSTS_IN_NOTE,
     NUMBER_COLUMNS,
     OUTPUT_LAYOUT,
@@ -35,6 +43,11 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
         audit.step(f"Asignando {relation['column']} según el {SUBTRUST_COLUMN}")
         assign_from_subtrust(detail, relation, audit)
     for formula in FORMULA_COLUMNS:
+        audit.step(f"Calculando {formula['column']}")
+        add_formula(detail, formula, audit)
+    audit.step(f"Asignando {VALIDITY_COLUMN}")
+    assign_validity(detail, audit)
+    for formula in FORMULA_COLUMNS_AFTER_VALIDITY:
         audit.step(f"Calculando {formula['column']}")
         add_formula(detail, formula, audit)
     return detail
@@ -136,16 +149,71 @@ def _shown(value: object) -> str:
 
 
 def add_formula(detail: pd.DataFrame, formula: dict, audit: AuditLog) -> None:
-    """Escribe en cada fila la fórmula de Excel de la columna (FORMULA_COLUMNS). Reglas TRA-403 y TRA-404.
+    """Escribe en cada fila la fórmula de Excel de la columna (FORMULA_COLUMNS y
+    FORMULA_COLUMNS_AFTER_VALIDITY). Reglas TRA-403, TRA-404 y TRA-410.
 
     openpyxl no calcula fórmulas: el resultado aparece al abrir el archivo en Excel.
     - VALIDACION: la fórmula de Diferencia del ETY, porque su resultado no queda guardado
       en el archivo y no se puede copiar.
     - CONTRATO: la fórmula del Detalle de pago, que toma el número de contrato de CONCEPTO.
+    - CONTRATO_2: la fórmula del Detalle de pago, que une CONTRATO y VIGENCIA.
     """
     column = formula["column"]
     detail[column] = [ExcelFormula(formula["formula"], formula["format"])] * len(detail)
     audit.transformation(formula["rule"], f"{column}: fórmula de Excel en {len(detail)} filas")
+
+
+def assign_validity(detail: pd.DataFrame, audit: AuditLog) -> None:
+    """VIGENCIA según el CONTRATO y el CONCEPTO de cada registro. Regla TRA-409.
+
+    Si el CONTRATO es un número, la vigencia es el número que sigue a
+    «CONTRATO_<número>-» en CONCEPTO (CONTRATO_1345-2025 -> 2025). Si el CONTRATO está
+    vacío o no es un número, o CONCEPTO no tiene esa expresión, VIGENCIA queda vacía.
+    """
+    values = []
+    not_number = not_found = 0
+    for concept in detail[CONCEPT_COLUMN]:
+        text = "" if is_empty(concept) else str(concept)
+        contract = contract_number(text)
+        if contract is None or not contract.isdigit():
+            not_number += 1
+            values.append(None)
+            continue
+        match = re.search(rf"{re.escape(CONTRACT_PREFIX)}{re.escape(contract)}-(\d+)", text)
+        if match is None:
+            not_found += 1
+        values.append(int(match.group(1)) if match else None)
+    detail[VALIDITY_COLUMN] = pd.Series(values, index=detail.index, dtype=object)
+    assigned = len(detail) - not_number - not_found
+    detail_text = (
+        f"{VALIDITY_COLUMN} asignada en {assigned} de {len(detail)} registros; "
+        f"vacía en {not_number} porque el {CONTRACT_WORD} está vacío o no es un número"
+    )
+    if not_found:
+        detail_text += f" y en {not_found} porque {CONCEPT_COLUMN} no tiene la expresión {CONTRACT_PREFIX}<número>-<vigencia>"
+    audit.transformation("TRA-409", detail_text)
+
+
+def contract_number(concept: str) -> str | None:
+    """El resultado de la fórmula de CONTRATO del Detalle de pago para ese CONCEPTO.
+
+    Repite los pasos de la fórmula de Excel (FORMULA_COLUMNS), porque la herramienta no
+    calcula fórmulas y VIGENCIA depende del resultado:
+    1. Busca «CONTRATO» sin distinguir mayúsculas (SEARCH); si no está, la fórmula da
+       #¡VALOR! y aquí se devuelve None.
+    2. Desde ahí, cambia espacios, «/» y «-» por «_» y quita «CONTRATO_» (SUBSTITUTE,
+       que sí distingue mayúsculas).
+    3. Toma el texto hasta el siguiente «_»; si no hay, la fórmula da #¡VALOR! (None).
+    """
+    start = concept.upper().find(CONTRACT_WORD.upper())
+    if start < 0:
+        return None
+    text = concept
+    for separator in CONTRACT_SEPARATORS:
+        text = text.replace(separator, "_")
+    text = text[start:].replace(CONTRACT_PREFIX, "")
+    end = text.find("_")
+    return text[:end] if end >= 0 else None
 
 
 def write_as_numbers(detail: pd.DataFrame, column: str, audit: AuditLog) -> None:

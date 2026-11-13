@@ -170,6 +170,19 @@ La columna K (Diferencia) del ETY corresponde a K (VALIDACION). En el ETY, Difer
 
 Una vez copiado CONCEPTO, la columna O (CONTRATO) se escribe en cada fila con la misma fórmula del Detalle de pago (`DetallePagoEjemploFormato.xlsx`), sobre CONCEPTO de la misma fila. Toma el número que sigue a «CONTRATO» (`..._CONTRATO_303-2026_...` → `303`). El resultado aparece al abrir el archivo en Excel. Si CONCEPTO no contiene «CONTRATO», Excel muestra `#¡VALOR!`, igual que en el Detalle de pago.
 
+### Paso 10 – VIGENCIA (TRA-409, implementado)
+
+La columna P (VIGENCIA) se llena así:
+
+1. El CONTRATO (columna O) debe ser un número. Si está vacío, o es alfabético o alfanumérico (por ejemplo `#¡VALOR!` o `CONTRATOS`), VIGENCIA queda en blanco.
+2. Si es un número, se busca en CONCEPTO (columna V) la expresión `CONTRATO_<número de contrato>-<vigencia>` y se toma la vigencia: `CONTRATO_1345-2025` → 2025, `CONTRATO_218-2026` → 2026, `CONTRATO_8-2024` → 2024, `CONTRATO_008-2026` → 2026. Si CONCEPTO no tiene esa expresión con el mismo número de contrato, VIGENCIA queda en blanco.
+
+La vigencia se escribe como número. Como CONTRATO es una fórmula de Excel y la herramienta no calcula fórmulas, su resultado se obtiene repitiendo en la herramienta los mismos pasos de la fórmula (`contract_number` en `process.py`); si la fórmula de CONTRATO cambia, hay que actualizar también esa función. El log de ejecución indica en cuántos registros se asignó y en cuántos quedó vacía, y por qué.
+
+### Paso 11 – CONTRATO_2 (TRA-410, implementado)
+
+Después de asignar VIGENCIA, la columna AD (CONTRATO_2) se escribe en cada fila con la misma fórmula del Detalle de pago (`DetallePagoEjemploFormato.xlsx`): `=+CONCATENATE(O2,"-",P2)`, que une CONTRATO y VIGENCIA con un guion (`303` y `2026` → `303-2026`). El resultado aparece al abrir el archivo en Excel. Si VIGENCIA quedó en blanco, Excel muestra el CONTRATO seguido del guion (por ejemplo `#¡VALOR!` o `CONTRATOS-`), igual que en el Detalle de pago.
+
 ## Archivo de salida
 
 - Hoja `Hoja1` con las 34 columnas del Detalle de pago, en este orden: ITEM, IDENTIFICACION, TERCERO, FECHA_DE_PAGO, VR_BRUTO, VR_RTEFTE, VR_RETEIVA, VR_RETEICA, VR_TASAS, VR_NETO, VALIDACION, ASIENTO, COMPROBANTE, NO_SEC_DOC, CONTRATO, VIGENCIA, SUBFIDEICOMISO, NOMBRE_SUBFIDEICOMISO_PAGO, CUENTA, TIPO_DE_PAGO, NO_BENEFICIARIOS, CONCEPTO, FIDUCIARIA_QUE_EFECTUO_EL_PAGO, INFORME_SEMANAL, PERIODO_DE_COBRO, RECURSOS, PROGRAMA, GL, Q_PAGOS, CONTRATO_2, AMORTIZACION_ANTICIPO, MULTA, FUENTE_DE_RECURSOS, RANGO.
@@ -187,4 +200,4 @@ La configuración de este formato está en `OUTPUT_LAYOUT` (`config.py`). El arc
 
 ## Pendiente por especificar
 
-- Cómo se llenan las demás columnas del Detalle de pago (incluidas las fórmulas de ITEM y CONTRATO_2 del ejemplo).
+- Cómo se llenan las demás columnas del Detalle de pago (incluida la fórmula de ITEM del ejemplo).

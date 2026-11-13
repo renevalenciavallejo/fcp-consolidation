@@ -22,7 +22,13 @@ from stages.stage_04_payment_detail.config import (
     SUBTRUST_RESOURCES,
     OUTPUT_LAYOUT,
 )
-from stages.stage_04_payment_detail.process import add_prefix, as_number, assign_from_subtrust
+from stages.stage_04_payment_detail.process import (
+    add_prefix,
+    as_number,
+    assign_from_subtrust,
+    assign_validity,
+    contract_number,
+)
 from tests.helpers import make_xlsx
 from tests.test_stage_01_ety_cleaning import OUTPUT_COLUMNS, ety_file
 from tests.test_stage_03_ap_voucher_validation import run as run_stage_3
@@ -107,7 +113,7 @@ def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_04_payment_detail)]
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-405",
-        "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404",
+        "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-409", "TRA-410",
     ]
 
 
@@ -118,7 +124,7 @@ def test_output_has_the_payment_detail_columns():
     assert [c.value for c in sheet[1]] == DETAIL_COLUMNS
     assert [a.rule for a in result.audit.transformations] == [
         "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405",
-        "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404",
+        "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-409", "TRA-410",
     ]
 
 
@@ -140,7 +146,7 @@ def test_ety_values_are_copied_row_by_row_without_changes():
             assert cell.value == expected, (row, detail_column)
     # Las columnas sin correspondencia quedan vacías.
     filled = [
-        *COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO",
+        *COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO", "VIGENCIA", "CONTRATO_2",
         *[relation["column"] for relation in SUBTRUST_RELATIONS],
     ]
     unmapped = [c for c in DETAIL_COLUMNS if c not in filled]
@@ -284,6 +290,61 @@ def test_unknown_or_empty_subtrust_leaves_funding_source_empty():
     lines = "\n".join(audit.step_lines())
     assert "✗ [TRA-406] 2 registros sin FUENTE_DE_RECURSOS" in lines
     assert "(9999, (vacío))" in lines
+
+
+@pytest.mark.parametrize(
+    ("concept", "expected"),
+    [
+        # Mismos resultados que la fórmula de CONTRATO en Excel.
+        ("DS_656-135323-1100622249_303_CONTRATO_303-2026_HONORARIOS", "303"),
+        ("DS_656-1_008_CONTRATO_008-2026_PAGO", "008"),
+        ("ADR_PROY_PROD_PIDAR_841-2024PAGO_01 AL 31", None),            # Sin «CONTRATO»: #¡VALOR!
+        ("656-1_REINTEGRO CONTRATOS_DEL MES", "CONTRATOS"),             # Alfabético
+        ("656-1_ARL_MTRA_CONTRATO_-2023-PLANILLA", ""),                 # Vacío
+        ("656-1_Contrato_45-2026_X", "Contrato"),                       # SUBSTITUTE distingue mayúsculas
+        ("PAGO CONTRATO", None),                                        # Sin «_» después: #¡VALOR!
+    ],
+)
+def test_contract_number_repeats_the_excel_formula(concept, expected):
+    assert contract_number(concept) == expected
+
+
+def test_validity_is_taken_only_when_the_contract_is_a_number():
+    audit = AuditLog(stage_rules(stage_04_payment_detail))
+    audit.step("Asignando VIGENCIA")
+    concepts = [
+        "DS_656-160432-830093042_2826_CONTRATO_2826-2025_2do-DESEMBOLSO",   # 2025
+        "DS_656-165410-1015427627_218_CONTRATO_218-2026_HONORARIOS",        # 2026
+        "DS_656-1_8_CONTRATO_8-2024_PAGO",                                  # 2024
+        "DS_656-1_008_CONTRATO_008-2026_PAGO",                              # 2026 (con ceros)
+        "ADR_PROY_PROD_PIDAR_841-2024PAGO_01 AL 31",                        # Sin CONTRATO
+        "656-1_REINTEGRO CONTRATOS_DEL MES",                                # CONTRATO alfabético
+        "DS_1_CONTRATO_77_SIN VIGENCIA",                                    # Número sin la expresión
+        None,                                                               # CONCEPTO vacío
+    ]
+    detail = pd.DataFrame({"CONCEPTO": concepts, "VIGENCIA": None}, dtype=object)
+    assign_validity(detail, audit)
+    assert list(detail["VIGENCIA"]) == [2025, 2026, 2024, 2026, None, None, None, None]
+    audit.finish_step()   # El resumen del paso se escribe al cerrarlo
+    lines = "\n".join(audit.step_lines())
+    assert "VIGENCIA asignada en 4 de 8 registros; vacía en 3 porque el CONTRATO" in lines
+    assert "y en 1 porque CONCEPTO no tiene la expresión CONTRATO_<número>-<vigencia>" in lines
+
+
+def test_validity_is_empty_without_contract_in_the_concept():
+    sheet = output_sheet(run(stage_3_output()))
+    assert sheet["V2"].value == "DS_PRUEBA" and sheet["P2"].value is None
+
+
+def test_contract_2_is_the_payment_detail_formula():
+    result = run(stage_3_output())
+    sheet = output_sheet(result)
+    # La misma fórmula del Detalle de pago (=+CONCATENATE(O2,"-",P2)), en cada fila.
+    assert sheet["AD2"].value == '=+CONCATENATE(O2,"-",P2)'
+    assert sheet["AD3"].value == '=+CONCATENATE(O3,"-",P3)'
+    assert sheet["AD2"].number_format == "General"
+    lines = "\n".join(result.audit.step_lines())
+    assert lines.index("Asignando VIGENCIA") < lines.index("Calculando CONTRATO_2")
 
 
 def test_copied_values_take_the_payment_detail_cell_formats():

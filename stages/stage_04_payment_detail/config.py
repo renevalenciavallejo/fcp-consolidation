@@ -159,6 +159,29 @@ FORMULA_COLUMNS = [
     },
 ]
 
+# VIGENCIA (regla TRA-409). Solo se llena si el CONTRATO (el resultado de su fórmula) es un
+# número; entonces se busca en CONCEPTO la expresión CONTRATO_<número>-<vigencia> (por ejemplo
+# CONTRATO_1345-2025) y se toma la vigencia. Como CONTRATO es una fórmula de Excel que la
+# herramienta no calcula, su resultado se obtiene con la misma lógica de la fórmula, usando
+# estos textos. Si cambia la fórmula de CONTRATO, hay que revisar contract_number() en process.py.
+VALIDITY_COLUMN = "VIGENCIA"
+CONCEPT_COLUMN = "CONCEPTO"
+CONTRACT_WORD = "CONTRATO"           # Palabra que busca la fórmula (sin distinguir mayúsculas)
+CONTRACT_PREFIX = "CONTRATO_"        # Texto que quita la fórmula (distingue mayúsculas)
+CONTRACT_SEPARATORS = [" ", "/", "-"]  # Caracteres que la fórmula cambia por «_»
+
+# Columnas con fórmula que usan VIGENCIA: se escriben después de asignarla (mismos datos que
+# FORMULA_COLUMNS). CONTRATO_2 es la fórmula del Detalle de pago (DetallePagoEjemploFormato.xlsx):
+# une CONTRATO y VIGENCIA con un guion (=+CONCATENATE(O2,"-",P2) -> 303-2026).
+FORMULA_COLUMNS_AFTER_VALIDITY = [
+    {
+        "rule": "TRA-410",
+        "column": "CONTRATO_2",
+        "formula": '=+CONCATENATE({CONTRATO},"-",{VIGENCIA})',
+        "format": None,
+    },
+]
+
 # Columnas del Detalle de pago donde los números que en el ETY vienen como texto (códigos)
 # se escriben como número, para que Excel no los marque como «Número almacenado como texto».
 # Solo los valores formados únicamente por dígitos y sin ceros a la izquierda; los demás se
@@ -378,8 +401,18 @@ RULES = {
     ),
     "TRA-404": (
         "Calcular CONTRATO con la fórmula del Detalle de pago, que toma de CONCEPTO el número que sigue "
-        "a «CONTRATO» (por ejemplo, «..._CONTRATO_303-2026_...» -> 303; fórmula de Excel en cada fila). "
-        "Las demás columnas del Detalle de pago quedan vacías"
+        "a «CONTRATO» (por ejemplo, «..._CONTRATO_303-2026_...» -> 303; fórmula de Excel en cada fila)"
+    ),
+    "TRA-409": (
+        "Asignar VIGENCIA: si el CONTRATO es un número, se busca en CONCEPTO la expresión "
+        "CONTRATO_<número>-<vigencia> (por ejemplo, CONTRATO_1345-2025 -> 2025) y se toma la vigencia. "
+        "Si el CONTRATO está vacío o no es un número, o no se encuentra la expresión, VIGENCIA queda "
+        "vacía"
+    ),
+    "TRA-410": (
+        "Calcular CONTRATO_2 con la fórmula del Detalle de pago, que une CONTRATO y VIGENCIA con un guion "
+        "(por ejemplo, 303-2026; fórmula de Excel en cada fila). Las demás columnas del Detalle de pago "
+        "quedan vacías"
     ),
 }
 
