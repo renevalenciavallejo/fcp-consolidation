@@ -14,6 +14,8 @@ from core.cleaning import normalize_code
 from core.settings import SOURCE_FILE, SOURCE_ROW
 from core.writer import ExcelFormula
 from stages.stage_04_payment_detail.config import (
+    BENEFICIARIES_COLUMN,
+    BENEFICIARIES_PREFIX,
     COLUMN_MAPPING,
     CONCEPT_COLUMN,
     CONTRACT_PREFIX,
@@ -24,6 +26,10 @@ from stages.stage_04_payment_detail.config import (
     FORMULA_COLUMNS,
     FORMULA_COLUMNS_AFTER_VALIDITY,
     GENERATION_YEAR_COLUMN,
+    INDIVIDUAL_BENEFICIARIES,
+    INDIVIDUAL_PAYMENT,
+    MASS_PAYMENT,
+    PAYMENT_TYPE_COLUMN,
     MAX_SUBTRUSTS_IN_NOTE,
     NUMBER_COLUMNS,
     OUTPUT_LAYOUT,
@@ -43,6 +49,8 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     assign_fixed_values(detail, audit)
     audit.step(f"Asignando {GENERATION_YEAR_COLUMN}")
     assign_generation_year(detail, date.today().year, audit)
+    audit.step(f"Asignando {PAYMENT_TYPE_COLUMN} y {BENEFICIARIES_COLUMN}")
+    assign_payment_type(detail, audit)
     for relation in SUBTRUST_RELATIONS:
         audit.step(f"Asignando {relation['column']} según el {SUBTRUST_COLUMN}")
         assign_from_subtrust(detail, relation, audit)
@@ -155,6 +163,31 @@ def assign_generation_year(detail: pd.DataFrame, year: int, audit: AuditLog) -> 
     """
     detail[GENERATION_YEAR_COLUMN] = [year] * len(detail)
     audit.transformation("TRA-411", f"{GENERATION_YEAR_COLUMN} = {year} (año de generación) en {len(detail)} registros")
+
+
+def assign_payment_type(detail: pd.DataFrame, audit: AuditLog) -> None:
+    """TIPO_DE_PAGO y NO_BENEFICIARIOS según CONCEPTO. Regla TRA-412.
+
+    Si CONCEPTO contiene BENEF_<número>_ (BENEF_14_), el pago es MASIVO y NO_BENEFICIARIOS
+    es ese número (14). Si no la contiene, o el número es 1 (BENEF_1_: un solo
+    beneficiario), INDIVIDUAL y 1.
+    """
+    pattern = re.compile(rf"{re.escape(BENEFICIARIES_PREFIX)}(\d+)_")
+    types, beneficiaries = [], []
+    for concept in detail[CONCEPT_COLUMN]:
+        match = pattern.search("" if is_empty(concept) else str(concept))
+        count = int(match.group(1)) if match else INDIVIDUAL_BENEFICIARIES
+        types.append(INDIVIDUAL_PAYMENT if count == INDIVIDUAL_BENEFICIARIES else MASS_PAYMENT)
+        beneficiaries.append(count)
+    detail[PAYMENT_TYPE_COLUMN] = pd.Series(types, index=detail.index, dtype=object)
+    detail[BENEFICIARIES_COLUMN] = pd.Series(beneficiaries, index=detail.index, dtype=object)
+    mass = types.count(MASS_PAYMENT)
+    audit.transformation(
+        "TRA-412",
+        f"{PAYMENT_TYPE_COLUMN}: {mass} {MASS_PAYMENT} ({BENEFICIARIES_PREFIX}<número>_ en {CONCEPT_COLUMN}, "
+        f"con más de {INDIVIDUAL_BENEFICIARIES} beneficiario) y {len(types) - mass} {INDIVIDUAL_PAYMENT} "
+        f"(con {INDIVIDUAL_BENEFICIARIES} en {BENEFICIARIES_COLUMN})",
+    )
 
 
 def _shown(value: object) -> str:

@@ -204,6 +204,17 @@ FIXED_VALUES = {
 # como número (por ejemplo, 2026). Es el mismo en todos los registros.
 GENERATION_YEAR_COLUMN = "RANGO"
 
+# TIPO_DE_PAGO y NO_BENEFICIARIOS (regla TRA-412). Si CONCEPTO contiene la expresión
+# BENEF_<número de beneficiarios>_ (por ejemplo BENEF_14_), el pago es masivo y el número de
+# beneficiarios es ese número. Si no la contiene, o el número es 1 (BENEF_1_), el pago es
+# individual, con 1 beneficiario.
+PAYMENT_TYPE_COLUMN = "TIPO_DE_PAGO"
+BENEFICIARIES_COLUMN = "NO_BENEFICIARIOS"
+BENEFICIARIES_PREFIX = "BENEF_"     # Texto que antecede al número (distingue mayúsculas)
+MASS_PAYMENT = "MASIVO"             # TIPO_DE_PAGO cuando se encuentra la expresión (con más de 1)
+INDIVIDUAL_PAYMENT = "INDIVIDUAL"   # TIPO_DE_PAGO cuando no se encuentra, o con BENEF_1_
+INDIVIDUAL_BENEFICIARIES = 1        # NO_BENEFICIARIOS de un pago individual
+
 # Columna del Detalle de pago con el Subfideicomiso de cada registro, del que salen las
 # columnas de SUBTRUST_RELATIONS.
 SUBTRUST_COLUMN = "SUBFIDEICOMISO"
@@ -388,6 +399,11 @@ RULES = {
     ),
     "TRA-411": (
         "Asignar a todos los registros, en RANGO, el año en que se genera el archivo (por ejemplo, 2026)"
+    ),
+    "TRA-412": (
+        "Asignar TIPO_DE_PAGO y NO_BENEFICIARIOS: si CONCEPTO contiene la expresión "
+        "BENEF_<número de beneficiarios>_ (por ejemplo, BENEF_14_), MASIVO y ese número (14). Si no la "
+        "contiene, o es BENEF_1_, INDIVIDUAL y 1"
     ),
     "TRA-407": (
         "Asignar NOMBRE_SUBFIDEICOMISO_PAGO según el SUBFIDEICOMISO de cada registro. Si el "

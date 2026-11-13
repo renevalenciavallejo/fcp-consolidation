@@ -28,6 +28,7 @@ from stages.stage_04_payment_detail.process import (
     as_number,
     assign_from_subtrust,
     assign_generation_year,
+    assign_payment_type,
     assign_validity,
     contract_number,
 )
@@ -115,6 +116,7 @@ def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_04_payment_detail)]
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-405", "TRA-411",
+        "TRA-412",
         "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-409", "TRA-410",
     ]
 
@@ -125,7 +127,7 @@ def test_output_has_the_payment_detail_columns():
     assert sheet.title == "Hoja1"
     assert [c.value for c in sheet[1]] == DETAIL_COLUMNS
     assert [a.rule for a in result.audit.transformations] == [
-        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405", "TRA-411",
+        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405", "TRA-411", "TRA-412",
         "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-409", "TRA-410",
     ]
 
@@ -149,6 +151,7 @@ def test_ety_values_are_copied_row_by_row_without_changes():
     # Las columnas sin correspondencia quedan vacías.
     filled = [
         *COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO", "VIGENCIA", "CONTRATO_2", "RANGO",
+        "TIPO_DE_PAGO", "NO_BENEFICIARIOS",
         *[relation["column"] for relation in SUBTRUST_RELATIONS],
     ]
     unmapped = [c for c in DETAIL_COLUMNS if c not in filled]
@@ -364,6 +367,34 @@ def test_generation_year_is_assigned_to_every_record():
     detail = pd.DataFrame({"RANGO": [None, None, None]}, dtype=object)
     assign_generation_year(detail, 2027, audit)
     assert list(detail["RANGO"]) == [2027, 2027, 2027]
+
+
+def test_payment_type_and_beneficiaries_come_from_the_concept():
+    audit = AuditLog(stage_rules(stage_04_payment_detail))
+    audit.step("Asignando TIPO_DE_PAGO y NO_BENEFICIARIOS")
+    concepts = [
+        "OFI26-019809_COMPARECIENTES__PAGO_3/3_BENEF_190_20260326629662",   # MASIVO 190
+        "OFI26-019172_Renta Basica__PAGO_5/6_BENEF_4_20260326456492",        # MASIVO 4
+        "OFI26-1_PAGO_1/1_BENEF_657_X",                                      # MASIVO 657
+        "OFI26-1_PAGO_1/1_BENEF_1_X",                                        # BENEF_1_: INDIVIDUAL 1
+        "DS_656-135323-1100622249_303_CONTRATO_303-2026_HONORARIOS",         # INDIVIDUAL 1
+        "OFI26-1_BENEF_14",                                                  # Sin «_» final: INDIVIDUAL
+        "OFI26-1_benef_14_X",                                                # En minúsculas: INDIVIDUAL
+        None,                                                                # CONCEPTO vacío: INDIVIDUAL
+    ]
+    detail = pd.DataFrame({"CONCEPTO": concepts}, dtype=object)
+    assign_payment_type(detail, audit)
+    assert list(detail["TIPO_DE_PAGO"]) == ["MASIVO"] * 3 + ["INDIVIDUAL"] * 5
+    assert list(detail["NO_BENEFICIARIOS"]) == [190, 4, 657, 1, 1, 1, 1, 1]
+    audit.finish_step()
+    lines = "\n".join(audit.step_lines())
+    assert "TIPO_DE_PAGO: 3 MASIVO (BENEF_<número>_ en CONCEPTO, con más de 1 beneficiario) y 5 INDIVIDUAL" in lines
+
+
+def test_payment_type_in_the_output():
+    sheet = output_sheet(run(stage_3_output()))
+    assert sheet["T2"].value == "INDIVIDUAL"
+    assert sheet["U2"].value == 1 and sheet["U2"].data_type == "n"
 
 
 def test_copied_values_take_the_payment_detail_cell_formats():

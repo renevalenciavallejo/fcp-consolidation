@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 4: TIPO_DE_PAGO y NO_BENEFICIARIOS salen de CONCEPTO: si contiene BENEF_<número>_ (por ejemplo BENEF_14_), MASIVO y ese número; si no la contiene, o es BENEF_1_, INDIVIDUAL y 1 (regla TRA-412).
 - Etapa 4: RANGO lleva en todos los registros el año en que se genera el archivo (regla TRA-411).
 - Etapa 4: CONTRATO_2 se escribe en cada fila con la fórmula del Detalle de pago, que une CONTRATO y VIGENCIA con un guion (`=+CONCATENATE(O2,"-",P2)`, regla TRA-410).
 - Etapa 4: VIGENCIA se asigna cuando el CONTRATO es un número: se toma de la expresión CONTRATO_<número>-<vigencia> de CONCEPTO (CONTRATO_1345-2025 → 2025; regla TRA-409). Si el CONTRATO está vacío o no es un número, o CONCEPTO no tiene la expresión, queda en blanco.
