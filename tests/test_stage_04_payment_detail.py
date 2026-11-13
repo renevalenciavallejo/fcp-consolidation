@@ -16,9 +16,12 @@ from stages.stage_04_payment_detail.config import (
     COLUMN_MAPPING,
     DATE_FORMAT,
     FIXED_VALUES,
+    FUNDING_SOURCES,
+    SUBTRUST_NAMES,
+    SUBTRUST_RELATIONS,
     OUTPUT_LAYOUT,
 )
-from stages.stage_04_payment_detail.process import add_prefix, as_number
+from stages.stage_04_payment_detail.process import add_prefix, as_number, assign_from_subtrust
 from tests.helpers import make_xlsx
 from tests.test_stage_01_ety_cleaning import OUTPUT_COLUMNS, ety_file
 from tests.test_stage_03_ap_voucher_validation import run as run_stage_3
@@ -103,7 +106,7 @@ def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_04_payment_detail)]
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-405",
-        "TRA-403", "TRA-404",
+        "TRA-407", "TRA-406", "TRA-403", "TRA-404",
     ]
 
 
@@ -113,7 +116,7 @@ def test_output_has_the_payment_detail_columns():
     assert sheet.title == "Hoja1"
     assert [c.value for c in sheet[1]] == DETAIL_COLUMNS
     assert [a.rule for a in result.audit.transformations] == [
-        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405", "TRA-403", "TRA-404",
+        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405", "TRA-407", "TRA-406", "TRA-403", "TRA-404",
     ]
 
 
@@ -134,7 +137,8 @@ def test_ety_values_are_copied_row_by_row_without_changes():
                 expected = f"656-{expected}"   # Con el prefijo (ver test_voucher_gets_the_656_prefix)
             assert cell.value == expected, (row, detail_column)
     # Las columnas sin correspondencia quedan vacías.
-    unmapped = [c for c in DETAIL_COLUMNS if c not in [*COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO"]]
+    unmapped = [c for c in DETAIL_COLUMNS if c not in [*COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO", "FUENTE_DE_RECURSOS",
+                                                "NOMBRE_SUBFIDEICOMISO_PAGO"]]
     assert all(sheet.cell(2, DETAIL_COLUMNS.index(c) + 1).value is None for c in unmapped)
     assert "2 registros del reporte ETY copiados" in "\n".join(result.audit.step_lines())
 
@@ -221,6 +225,46 @@ def test_fixed_values_are_assigned_to_every_record():
     assert sheet["AE2"].number_format == ACCOUNTING_FORMAT
     lines = "\n".join(result.audit.step_lines())
     assert "FIDUCIARIA_QUE_EFECTUO_EL_PAGO = «FIDUPREVISORA», GL = 656, Q_PAGOS = «1»" in lines
+
+
+def test_funding_source_comes_from_the_subtrust():
+    result = run(stage_3_output())
+    sheet = output_sheet(result)
+    assert sheet["Q2"].value == 1002 and sheet["AG2"].value == "PGN"
+    assert "FUENTE_DE_RECURSOS asignada en 2 de 2 registros" in "\n".join(result.audit.step_lines())
+
+
+def test_funding_source_relation_has_44_subtrusts():
+    assert len(FUNDING_SOURCES) == 44
+    assert set(FUNDING_SOURCES.values()) == {"PGN", "OTROS"}
+    assert FUNDING_SOURCES["2016"] == "OTROS" and FUNDING_SOURCES["2041"] == "PGN"
+
+
+def test_subtrust_name_comes_from_the_subtrust():
+    result = run(stage_3_output())
+    sheet = output_sheet(result)
+    assert sheet["Q2"].value == 1002
+    assert sheet["R2"].value == "PROGRAMAS DE DESARROLLO CON ENFOQUE TERRITORIAL -PDET"
+    assert "NOMBRE_SUBFIDEICOMISO_PAGO asignada en 2 de 2 registros" in "\n".join(result.audit.step_lines())
+
+
+def test_subtrust_names_have_the_same_44_subtrusts_and_no_trailing_spaces():
+    assert set(SUBTRUST_NAMES) == set(FUNDING_SOURCES)
+    assert all(name == name.strip() for name in SUBTRUST_NAMES.values())
+    assert SUBTRUST_NAMES["2024"] == "NIÑEZ Y ADOLESCENCIA ICBF"
+    assert SUBTRUST_NAMES["1003"] == SUBTRUST_NAMES["2045"] == "SUSTITUCION"
+
+
+def test_unknown_or_empty_subtrust_leaves_funding_source_empty():
+    audit = AuditLog(stage_rules(stage_04_payment_detail))
+    audit.step("Asignando FUENTE_DE_RECURSOS")
+    detail = pd.DataFrame({"SUBFIDEICOMISO": [2054, "2016", 9999, None], "FUENTE_DE_RECURSOS": None}, dtype=object)
+    relation = next(r for r in SUBTRUST_RELATIONS if r["column"] == "FUENTE_DE_RECURSOS")
+    assign_from_subtrust(detail, relation, audit)
+    assert list(detail["FUENTE_DE_RECURSOS"]) == ["OTROS", "OTROS", None, None]
+    lines = "\n".join(audit.step_lines())
+    assert "✗ [TRA-406] 2 registros sin FUENTE_DE_RECURSOS" in lines
+    assert "(9999, (vacío))" in lines
 
 
 def test_copied_values_take_the_payment_detail_cell_formats():

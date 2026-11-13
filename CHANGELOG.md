@@ -2,6 +2,11 @@
 
 Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
+## Sin publicar
+
+- Etapa 4: NOMBRE_SUBFIDEICOMISO_PAGO se asigna según el SUBFIDEICOMISO (regla TRA-407), con la relación de 44 Subfideicomisos, sin espacios al final. Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log lo indica.
+- Etapa 4: FUENTE_DE_RECURSOS se asigna según el SUBFIDEICOMISO (PGN u OTROS, regla TRA-406), con la relación de 44 Subfideicomisos. Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log lo indica.
+
 ## 1.0.0 – 2026-11-12
 
 Primera versión para uso de los usuarios: Etapas 1 a 4 (limpieza del reporte ETY, conciliación de pagos, cruce con el AP Voucher e integración al Detalle de pago).

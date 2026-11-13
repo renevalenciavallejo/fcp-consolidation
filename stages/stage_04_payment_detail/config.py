@@ -177,6 +177,119 @@ FIXED_VALUES = {
     "MULTA": 0,
 }
 
+# Columna del Detalle de pago con el Subfideicomiso de cada registro, del que salen las
+# columnas de SUBTRUST_RELATIONS.
+SUBTRUST_COLUMN = "SUBFIDEICOMISO"
+
+# Relación Subfideicomiso -> nombre del Subfideicomiso (NOMBRE_SUBFIDEICOMISO_PAGO). Los
+# nombres van sin espacios al final: en el Detalle de pago el mismo nombre aparece con y sin
+# espacio final, y Excel los tomaría como valores distintos en filtros y tablas dinámicas.
+SUBTRUST_NAMES = {
+    "1001": "REINCORPORACION",
+    "1002": "PROGRAMAS DE DESARROLLO CON ENFOQUE TERRITORIAL -PDET",
+    "1003": "SUSTITUCION",
+    "1004": "PRIMERA INFANCIA ICBF",
+    "1005": "TEJIENDO PAZ - FUNCIONAMIENTO",
+    "1006": "JUSTICIA ESPECIAL PARA LA PAZ",
+    "1007": "IMPLEMENTACION",
+    "1008": "AGENCIA NACIONAL DE TIERRAS",
+    "1009": "SOCIEDAD DE ACTIVOS ESPECIALES - SAE",
+    "2010": "HERENCIA COLOMBIA",
+    "2011": "COLOMBIA SOSTENIBLE",
+    "2013": "BID PRESTAMO",
+    "2016": "PROGRAMAS DE DESARROLLO CON ENFOQUE TERRITORIAL -PDET",
+    "2017": "AMBIENTE Y DESARROLLO SOSTENIBLE",
+    "2018": "BID FACILIDAD",
+    "2019": "AGENCIA NACIONAL DE TIERRAS (2)",
+    "2020": "KFW",
+    "2021": "AFD",
+    "2022": "BID FACILIDAD",
+    "2023": "VISION AMAZONIA",
+    "2024": "NIÑEZ Y ADOLESCENCIA ICBF",
+    "2025": "BID FACILIDAD",
+    "2026": "BID FACILIDAD",
+    "2027": "ZONA ZEII CATATUMBO",
+    "2028": "CATASTRO MULTIPROPOSITO",
+    "2029": "ZONA ZEII CATATUMBO - CATASTRO",
+    "2030": "PROGRAMAS DE DESARROLLO CON ENFOQUE TERRITORIAL -PDET",
+    "2031": "CATASTRO MULTIPROPOSITO",
+    "2032": "PROGRAMAS DE DESARROLLO CON ENFOQUE TERRITORIAL -PDET",
+    "2033": "PROGRAMAS DE DESARROLLO CON ENFOQUE TERRITORIAL -PDET",
+    "2034": "AGENCIA NACIONAL DE TIERRAS (2)",
+    "2035": "CATASTRO MULTIPROPOSITO",
+    "2036": "KFW",
+    "2038": "AGENCIA DE DESARROLLO RURAL - ADR",
+    "2039": "MINISTERIO DE AGRICULTURA Y DESARROLLO RURAL",
+    "2041": "ACCIONES COMUNITARIAS Y RESTAURATIVAS -ARN",
+    "2042": "SERVICIO SOCIAL PARA LA PAZ",
+    "2043": "AGENCIA NACIONAL DE TIERRAS (2)",
+    "2044": "ATENCION INTEGRAL DE LAS VICTIMAS",
+    "2045": "SUSTITUCION",
+    "2047": "MINISTERIO DE TRABAJO",
+    "2048": "SERVICIO SOCIAL PARA LA PAZ",
+    "2049": "SERVICIO SOCIAL PARA LA PAZ",
+    "2054": "SERVICIO SOCIAL PARA LA PAZ",
+}
+
+# Relación Subfideicomiso -> fuente de recursos (FUENTE_DE_RECURSOS).
+FUNDING_SOURCES = {
+    "1001": "PGN",
+    "1002": "PGN",
+    "1003": "PGN",
+    "1004": "PGN",
+    "1005": "PGN",
+    "1006": "PGN",
+    "1007": "PGN",
+    "1008": "PGN",
+    "1009": "PGN",
+    "2010": "PGN",
+    "2011": "PGN",
+    "2013": "PGN",
+    "2016": "OTROS",
+    "2017": "PGN",
+    "2018": "OTROS",
+    "2019": "PGN",
+    "2020": "OTROS",
+    "2021": "OTROS",
+    "2022": "OTROS",
+    "2023": "OTROS",
+    "2024": "PGN",
+    "2025": "OTROS",
+    "2026": "OTROS",
+    "2027": "OTROS",
+    "2028": "OTROS",
+    "2029": "OTROS",
+    "2030": "OTROS",
+    "2031": "PGN",
+    "2032": "OTROS",
+    "2033": "OTROS",
+    "2034": "OTROS",
+    "2035": "OTROS",
+    "2036": "OTROS",
+    "2038": "OTROS",
+    "2039": "OTROS",
+    "2041": "PGN",
+    "2042": "PGN",
+    "2043": "OTROS",
+    "2044": "OTROS",
+    "2045": "OTROS",
+    "2047": "OTROS",
+    "2048": "OTROS",
+    "2049": "OTROS",
+    "2054": "OTROS",
+}
+
+# Columnas del Detalle de pago que se llenan según el Subfideicomiso de cada registro, en este
+# orden: regla, columna y relación. Un Subfideicomiso que no está en la relación (o vacío) deja
+# la celda vacía y se informa en el log, para completarla manualmente.
+SUBTRUST_RELATIONS = [
+    {"rule": "TRA-407", "column": "NOMBRE_SUBFIDEICOMISO_PAGO", "values": SUBTRUST_NAMES},
+    {"rule": "TRA-406", "column": "FUENTE_DE_RECURSOS", "values": FUNDING_SOURCES},
+]
+
+# Máximo de Subfideicomisos sin relación que se listan en el log de ejecución.
+MAX_SUBTRUSTS_IN_NOTE = 20
+
 # Reglas propias de la etapa (serie 4xx).
 RULES = {
     "TRA-401": (
@@ -195,6 +308,14 @@ RULES = {
     "TRA-405": (
         "Asignar a todos los registros los valores fijos del Detalle de pago: FIDUCIARIA_QUE_EFECTUO_EL_PAGO "
         "«FIDUPREVISORA», GL 656, Q_PAGOS «1», AMORTIZACION_ANTICIPO 0 y MULTA 0"
+    ),
+    "TRA-407": (
+        "Asignar NOMBRE_SUBFIDEICOMISO_PAGO según el SUBFIDEICOMISO de cada registro. Si el "
+        "Subfideicomiso no está en la relación o está vacío, la celda queda vacía y se informa en el log"
+    ),
+    "TRA-406": (
+        "Asignar FUENTE_DE_RECURSOS (PGN u OTROS) según el SUBFIDEICOMISO de cada registro. Si el "
+        "Subfideicomiso no está en la relación o está vacío, la celda queda vacía y se informa en el log"
     ),
     "TRA-403": (
         "Calcular VALIDACION con la misma fórmula de Diferencia del ETY: VR_BRUTO - VR_RTEFTE - VR_RETEIVA "

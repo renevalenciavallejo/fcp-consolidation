@@ -85,11 +85,59 @@ A todos los registros se les asignan los mismos valores que tienen todos los reg
 | AE (AMORTIZACION_ANTICIPO) | 0 (se ve como «$ -» por el formato de contabilidad) |
 | AF (MULTA) | 0 (se ve como «$ -») |
 
-### Paso 5 – VALIDACION (TRA-403, implementado)
+### Paso 5 – NOMBRE_SUBFIDEICOMISO_PAGO (TRA-407, implementado)
+
+La columna R (NOMBRE_SUBFIDEICOMISO_PAGO) se llena según el SUBFIDEICOMISO (columna Q) de cada registro, con esta relación (`SUBTRUST_NAMES` en `config.py`):
+
+| Subfideicomiso | Nombre |
+| --- | --- |
+| 1001 | REINCORPORACION |
+| 1002, 2016, 2030, 2032, 2033 | PROGRAMAS DE DESARROLLO CON ENFOQUE TERRITORIAL -PDET |
+| 1003, 2045 | SUSTITUCION |
+| 1004 | PRIMERA INFANCIA ICBF |
+| 1005 | TEJIENDO PAZ - FUNCIONAMIENTO |
+| 1006 | JUSTICIA ESPECIAL PARA LA PAZ |
+| 1007 | IMPLEMENTACION |
+| 1008 | AGENCIA NACIONAL DE TIERRAS |
+| 1009 | SOCIEDAD DE ACTIVOS ESPECIALES - SAE |
+| 2010 | HERENCIA COLOMBIA |
+| 2011 | COLOMBIA SOSTENIBLE |
+| 2013 | BID PRESTAMO |
+| 2017 | AMBIENTE Y DESARROLLO SOSTENIBLE |
+| 2018, 2022, 2025, 2026 | BID FACILIDAD |
+| 2019, 2034, 2043 | AGENCIA NACIONAL DE TIERRAS (2) |
+| 2020, 2036 | KFW |
+| 2021 | AFD |
+| 2023 | VISION AMAZONIA |
+| 2024 | NIÑEZ Y ADOLESCENCIA ICBF |
+| 2027 | ZONA ZEII CATATUMBO |
+| 2028, 2031, 2035 | CATASTRO MULTIPROPOSITO |
+| 2029 | ZONA ZEII CATATUMBO - CATASTRO |
+| 2038 | AGENCIA DE DESARROLLO RURAL - ADR |
+| 2039 | MINISTERIO DE AGRICULTURA Y DESARROLLO RURAL |
+| 2041 | ACCIONES COMUNITARIAS Y RESTAURATIVAS -ARN |
+| 2042, 2048, 2049, 2054 | SERVICIO SOCIAL PARA LA PAZ |
+| 2044 | ATENCION INTEGRAL DE LAS VICTIMAS |
+| 2047 | MINISTERIO DE TRABAJO |
+
+Los nombres se escriben sin espacios al final (en el Detalle de pago el mismo nombre aparece con y sin espacio final, y Excel los tomaría como valores distintos). Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗, para completarla manualmente. No detiene el proceso.
+
+### Paso 6 – FUENTE_DE_RECURSOS (TRA-406, implementado)
+
+La columna AG (FUENTE_DE_RECURSOS) se llena según el SUBFIDEICOMISO (columna Q) de cada registro, con esta relación (`FUNDING_SOURCES` en `config.py`):
+
+| Fuente | Subfideicomisos |
+| --- | --- |
+| PGN | 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 2010, 2011, 2013, 2017, 2019, 2024, 2031, 2041, 2042 |
+| OTROS | 2016, 2018, 2020, 2021, 2022, 2023, 2025, 2026, 2027, 2028, 2029, 2030, 2032, 2033, 2034, 2035, 2036, 2038, 2039, 2043, 2044, 2045, 2047, 2048, 2049, 2054 |
+
+Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗ (cuántos registros y qué Subfideicomisos), para completarla manualmente. No detiene el proceso.
+
+### Paso 7 – VALIDACION (TRA-403, implementado)
 
 La columna K (Diferencia) del ETY corresponde a K (VALIDACION). En el ETY, Diferencia es una fórmula de Excel (regla TRA-101 de la Etapa 1) y su resultado no queda guardado en el archivo mientras no se abra y guarde en Excel, así que su valor no se puede copiar. VALIDACION se escribe en cada fila con la misma fórmula sobre las columnas copiadas: `=E2-F2-G2-H2-I2-J2` (VR_BRUTO − VR_RTEFTE − VR_RETEIVA − VR_RETEICA − VR_TASAS − VR_NETO), igual a la del Detalle de pago. El resultado aparece al abrir el archivo en Excel, con formato de contabilidad en pesos.
 
-### Paso 6 – CONTRATO (TRA-404, implementado)
+### Paso 8 – CONTRATO (TRA-404, implementado)
 
 Una vez copiado CONCEPTO, la columna O (CONTRATO) se escribe en cada fila con la misma fórmula del Detalle de pago (`DetallePagoEjemploFormato.xlsx`), sobre CONCEPTO de la misma fila. Toma el número que sigue a «CONTRATO» (`..._CONTRATO_303-2026_...` → `303`). El resultado aparece al abrir el archivo en Excel. Si CONCEPTO no contiene «CONTRATO», Excel muestra `#¡VALOR!`, igual que en el Detalle de pago.
 

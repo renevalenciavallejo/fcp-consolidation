@@ -14,8 +14,11 @@ from stages.stage_04_payment_detail.config import (
     COLUMN_MAPPING,
     FIXED_VALUES,
     FORMULA_COLUMNS,
+    MAX_SUBTRUSTS_IN_NOTE,
     NUMBER_COLUMNS,
     OUTPUT_LAYOUT,
+    SUBTRUST_COLUMN,
+    SUBTRUST_RELATIONS,
     VALUE_PREFIXES,
 )
 
@@ -28,6 +31,9 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     detail = copy_ety_values(ety, detail, audit)
     audit.step("Asignando los valores fijos del Detalle de pago")
     assign_fixed_values(detail, audit)
+    for relation in SUBTRUST_RELATIONS:
+        audit.step(f"Asignando {relation['column']} según el {SUBTRUST_COLUMN}")
+        assign_from_subtrust(detail, relation, audit)
     for formula in FORMULA_COLUMNS:
         audit.step(f"Calculando {formula['column']}")
         add_formula(detail, formula, audit)
@@ -94,6 +100,34 @@ def assign_fixed_values(detail: pd.DataFrame, audit: AuditLog) -> None:
         detail[column] = [value] * len(detail)
     values = ", ".join(f"{column} = {_shown(value)}" for column, value in FIXED_VALUES.items())
     audit.transformation("TRA-405", f"Valores fijos en {len(detail)} registros: {values}")
+
+
+def assign_from_subtrust(detail: pd.DataFrame, relation: dict, audit: AuditLog) -> None:
+    """Llena la columna con el valor que le corresponde al SUBFIDEICOMISO de cada registro,
+    según su relación (SUBTRUST_RELATIONS). Reglas TRA-406 (FUENTE_DE_RECURSOS) y TRA-407
+    (NOMBRE_SUBFIDEICOMISO_PAGO).
+
+    El Subfideicomiso se compara como código (1002 y «1002» son el mismo). Si no está en
+    la relación o está vacío, la celda queda vacía y el log lo indica con ✗, para que el
+    usuario la complete; no detiene el proceso.
+    """
+    column, rule, values = relation["column"], relation["rule"], relation["values"]
+    subtrusts = detail[SUBTRUST_COLUMN].map(normalize_code)
+    # dtype=object: los vacíos quedan como None, sin que pandas los convierta en NaN.
+    detail[column] = pd.Series([values.get(code) for code in subtrusts], index=detail.index, dtype=object)
+    missing = detail[column].map(is_empty)
+    audit.transformation(rule, f"{column} asignada en {int((~missing).sum())} de {len(detail)} registros")
+    audit.note(audit.step_summary())
+    if missing.any():
+        unknown = ["(vacío)" if is_empty(code) else code for code in dict.fromkeys(subtrusts[missing])]
+        shown = ", ".join(unknown[:MAX_SUBTRUSTS_IN_NOTE])
+        if len(unknown) > MAX_SUBTRUSTS_IN_NOTE:
+            shown += f" y {len(unknown) - MAX_SUBTRUSTS_IN_NOTE} más"
+        audit.note(
+            f"[{rule}] {int(missing.sum())} registros sin {column}: el {SUBTRUST_COLUMN} "
+            f"no está en la relación o está vacío ({shown}). Complételos manualmente",
+            ok=False,
+        )
 
 
 def _shown(value: object) -> str:
