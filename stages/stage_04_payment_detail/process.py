@@ -5,6 +5,7 @@ process(). Aquí van las reglas propias de la etapa, en el orden de ESPECIFICACI
 """
 
 import re
+from datetime import date
 
 import pandas as pd
 
@@ -22,6 +23,7 @@ from stages.stage_04_payment_detail.config import (
     FIXED_VALUES,
     FORMULA_COLUMNS,
     FORMULA_COLUMNS_AFTER_VALIDITY,
+    GENERATION_YEAR_COLUMN,
     MAX_SUBTRUSTS_IN_NOTE,
     NUMBER_COLUMNS,
     OUTPUT_LAYOUT,
@@ -39,6 +41,8 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     detail = copy_ety_values(ety, detail, audit)
     audit.step("Asignando los valores fijos del Detalle de pago")
     assign_fixed_values(detail, audit)
+    audit.step(f"Asignando {GENERATION_YEAR_COLUMN}")
+    assign_generation_year(detail, date.today().year, audit)
     for relation in SUBTRUST_RELATIONS:
         audit.step(f"Asignando {relation['column']} según el {SUBTRUST_COLUMN}")
         assign_from_subtrust(detail, relation, audit)
@@ -141,6 +145,16 @@ def assign_from_subtrust(detail: pd.DataFrame, relation: dict, audit: AuditLog) 
             f"no está en la relación o está vacío ({shown}). Complételos manualmente",
             ok=False,
         )
+
+
+def assign_generation_year(detail: pd.DataFrame, year: int, audit: AuditLog) -> None:
+    """RANGO: el año en que se genera el archivo, igual en todos los registros. Regla TRA-411.
+
+    El año se recibe como parámetro (process() pasa el de la fecha actual) para que las
+    pruebas no dependan del día en que se ejecutan.
+    """
+    detail[GENERATION_YEAR_COLUMN] = [year] * len(detail)
+    audit.transformation("TRA-411", f"{GENERATION_YEAR_COLUMN} = {year} (año de generación) en {len(detail)} registros")
 
 
 def _shown(value: object) -> str:

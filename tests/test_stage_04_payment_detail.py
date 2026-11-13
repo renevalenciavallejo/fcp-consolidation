@@ -1,5 +1,6 @@
 """Etapa 4: carga del archivo procesado en la Etapa 3 y archivo con el formato del Detalle de pago."""
 
+from datetime import date
 from io import BytesIO
 
 import pandas as pd
@@ -26,6 +27,7 @@ from stages.stage_04_payment_detail.process import (
     add_prefix,
     as_number,
     assign_from_subtrust,
+    assign_generation_year,
     assign_validity,
     contract_number,
 )
@@ -112,7 +114,7 @@ def test_ety_is_validated_on_upload():
 def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_04_payment_detail)]
     assert codes == [
-        "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-405",
+        "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-405", "TRA-411",
         "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-409", "TRA-410",
     ]
 
@@ -123,7 +125,7 @@ def test_output_has_the_payment_detail_columns():
     assert sheet.title == "Hoja1"
     assert [c.value for c in sheet[1]] == DETAIL_COLUMNS
     assert [a.rule for a in result.audit.transformations] == [
-        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405",
+        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405", "TRA-411",
         "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-409", "TRA-410",
     ]
 
@@ -146,7 +148,7 @@ def test_ety_values_are_copied_row_by_row_without_changes():
             assert cell.value == expected, (row, detail_column)
     # Las columnas sin correspondencia quedan vacías.
     filled = [
-        *COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO", "VIGENCIA", "CONTRATO_2",
+        *COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO", "VIGENCIA", "CONTRATO_2", "RANGO",
         *[relation["column"] for relation in SUBTRUST_RELATIONS],
     ]
     unmapped = [c for c in DETAIL_COLUMNS if c not in filled]
@@ -345,6 +347,23 @@ def test_contract_2_is_the_payment_detail_formula():
     assert sheet["AD2"].number_format == "General"
     lines = "\n".join(result.audit.step_lines())
     assert lines.index("Asignando VIGENCIA") < lines.index("Calculando CONTRATO_2")
+
+
+def test_range_is_the_year_the_file_is_generated():
+    result = run(stage_3_output())
+    sheet = output_sheet(result)
+    year = date.today().year
+    assert sheet["AH2"].value == year and sheet["AH3"].value == year
+    assert sheet["AH2"].data_type == "n"
+    assert f"RANGO = {year} (año de generación) en 2 registros" in "\n".join(result.audit.step_lines())
+
+
+def test_generation_year_is_assigned_to_every_record():
+    audit = AuditLog(stage_rules(stage_04_payment_detail))
+    audit.step("Asignando RANGO")
+    detail = pd.DataFrame({"RANGO": [None, None, None]}, dtype=object)
+    assign_generation_year(detail, 2027, audit)
+    assert list(detail["RANGO"]) == [2027, 2027, 2027]
 
 
 def test_copied_values_take_the_payment_detail_cell_formats():

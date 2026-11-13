@@ -200,6 +200,10 @@ FIXED_VALUES = {
     "MULTA": 0,
 }
 
+# Columna del Detalle de pago con el año en que se genera el archivo (al presionar Procesar),
+# como número (por ejemplo, 2026). Es el mismo en todos los registros.
+GENERATION_YEAR_COLUMN = "RANGO"
+
 # Columna del Detalle de pago con el Subfideicomiso de cada registro, del que salen las
 # columnas de SUBTRUST_RELATIONS.
 SUBTRUST_COLUMN = "SUBFIDEICOMISO"
@@ -381,6 +385,9 @@ RULES = {
     "TRA-405": (
         "Asignar a todos los registros los valores fijos del Detalle de pago: FIDUCIARIA_QUE_EFECTUO_EL_PAGO "
         "«FIDUPREVISORA», GL 656, Q_PAGOS «1», AMORTIZACION_ANTICIPO 0 y MULTA 0"
+    ),
+    "TRA-411": (
+        "Asignar a todos los registros, en RANGO, el año en que se genera el archivo (por ejemplo, 2026)"
     ),
     "TRA-407": (
         "Asignar NOMBRE_SUBFIDEICOMISO_PAGO según el SUBFIDEICOMISO de cada registro. Si el "

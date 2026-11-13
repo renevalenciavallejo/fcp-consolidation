@@ -85,7 +85,11 @@ A todos los registros se les asignan los mismos valores que tienen todos los reg
 | AE (AMORTIZACION_ANTICIPO) | 0 (se ve como «$ -» por el formato de contabilidad) |
 | AF (MULTA) | 0 (se ve como «$ -») |
 
-### Paso 5 – NOMBRE_SUBFIDEICOMISO_PAGO (TRA-407, implementado)
+### Paso 5 – RANGO (TRA-411, implementado)
+
+A todos los registros se les asigna en la columna AH (RANGO) el año en que se genera el archivo (el del día en que se presiona Procesar), como número. Por ejemplo, un archivo generado el 13 de noviembre de 2026 lleva 2026 en todos los registros.
+
+### Paso 6 – NOMBRE_SUBFIDEICOMISO_PAGO (TRA-407, implementado)
 
 La columna R (NOMBRE_SUBFIDEICOMISO_PAGO) se llena según el SUBFIDEICOMISO (columna Q) de cada registro, con esta relación (`SUBTRUST_NAMES` en `config.py`):
 
@@ -122,7 +126,7 @@ La columna R (NOMBRE_SUBFIDEICOMISO_PAGO) se llena según el SUBFIDEICOMISO (col
 
 Los nombres se escriben sin espacios al final (en el Detalle de pago el mismo nombre aparece con y sin espacio final, y Excel los tomaría como valores distintos). Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗, para completarla manualmente. No detiene el proceso.
 
-### Paso 6 – RECURSOS (TRA-408, implementado)
+### Paso 7 – RECURSOS (TRA-408, implementado)
 
 La columna Z (RECURSOS) se llena según el SUBFIDEICOMISO (columna Q) de cada registro, con esta relación (`SUBTRUST_RESOURCES` en `config.py`):
 
@@ -151,7 +155,7 @@ La columna Z (RECURSOS) se llena según el SUBFIDEICOMISO (columna Q) de cada re
 
 «PAC JULIO 2026» es el PAC vigente: cuando cambie, se actualiza en `SUBTRUST_RESOURCES` para todos los Subfideicomisos que lo usan. Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗, para completarla manualmente. No detiene el proceso.
 
-### Paso 7 – FUENTE_DE_RECURSOS (TRA-406, implementado)
+### Paso 8 – FUENTE_DE_RECURSOS (TRA-406, implementado)
 
 La columna AG (FUENTE_DE_RECURSOS) se llena según el SUBFIDEICOMISO (columna Q) de cada registro, con esta relación (`FUNDING_SOURCES` en `config.py`):
 
@@ -162,15 +166,15 @@ La columna AG (FUENTE_DE_RECURSOS) se llena según el SUBFIDEICOMISO (columna Q)
 
 Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗ (cuántos registros y qué Subfideicomisos), para completarla manualmente. No detiene el proceso.
 
-### Paso 8 – VALIDACION (TRA-403, implementado)
+### Paso 9 – VALIDACION (TRA-403, implementado)
 
 La columna K (Diferencia) del ETY corresponde a K (VALIDACION). En el ETY, Diferencia es una fórmula de Excel (regla TRA-101 de la Etapa 1) y su resultado no queda guardado en el archivo mientras no se abra y guarde en Excel, así que su valor no se puede copiar. VALIDACION se escribe en cada fila con la misma fórmula sobre las columnas copiadas: `=E2-F2-G2-H2-I2-J2` (VR_BRUTO − VR_RTEFTE − VR_RETEIVA − VR_RETEICA − VR_TASAS − VR_NETO), igual a la del Detalle de pago. El resultado aparece al abrir el archivo en Excel, con formato de contabilidad en pesos.
 
-### Paso 9 – CONTRATO (TRA-404, implementado)
+### Paso 10 – CONTRATO (TRA-404, implementado)
 
 Una vez copiado CONCEPTO, la columna O (CONTRATO) se escribe en cada fila con la misma fórmula del Detalle de pago (`DetallePagoEjemploFormato.xlsx`), sobre CONCEPTO de la misma fila. Toma el número que sigue a «CONTRATO» (`..._CONTRATO_303-2026_...` → `303`). El resultado aparece al abrir el archivo en Excel. Si CONCEPTO no contiene «CONTRATO», Excel muestra `#¡VALOR!`, igual que en el Detalle de pago.
 
-### Paso 10 – VIGENCIA (TRA-409, implementado)
+### Paso 11 – VIGENCIA (TRA-409, implementado)
 
 La columna P (VIGENCIA) se llena así:
 
@@ -179,7 +183,7 @@ La columna P (VIGENCIA) se llena así:
 
 La vigencia se escribe como número. Como CONTRATO es una fórmula de Excel y la herramienta no calcula fórmulas, su resultado se obtiene repitiendo en la herramienta los mismos pasos de la fórmula (`contract_number` en `process.py`); si la fórmula de CONTRATO cambia, hay que actualizar también esa función. El log de ejecución indica en cuántos registros se asignó y en cuántos quedó vacía, y por qué.
 
-### Paso 11 – CONTRATO_2 (TRA-410, implementado)
+### Paso 12 – CONTRATO_2 (TRA-410, implementado)
 
 Después de asignar VIGENCIA, la columna AD (CONTRATO_2) se escribe en cada fila con la misma fórmula del Detalle de pago (`DetallePagoEjemploFormato.xlsx`): `=+CONCATENATE(O2,"-",P2)`, que une CONTRATO y VIGENCIA con un guion (`303` y `2026` → `303-2026`). El resultado aparece al abrir el archivo en Excel. Si VIGENCIA quedó en blanco, Excel muestra el CONTRATO seguido del guion (por ejemplo `#¡VALOR!` o `CONTRATOS-`), igual que en el Detalle de pago.
 

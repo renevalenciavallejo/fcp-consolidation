@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 4: RANGO lleva en todos los registros el año en que se genera el archivo (regla TRA-411).
 - Etapa 4: CONTRATO_2 se escribe en cada fila con la fórmula del Detalle de pago, que une CONTRATO y VIGENCIA con un guion (`=+CONCATENATE(O2,"-",P2)`, regla TRA-410).
 - Etapa 4: VIGENCIA se asigna cuando el CONTRATO es un número: se toma de la expresión CONTRATO_<número>-<vigencia> de CONCEPTO (CONTRATO_1345-2025 → 2025; regla TRA-409). Si el CONTRATO está vacío o no es un número, o CONCEPTO no tiene la expresión, queda en blanco.
 - Etapa 4: RECURSOS se asigna según el SUBFIDEICOMISO (regla TRA-408), con la relación de 44 Subfideicomisos (por ejemplo, PAC JULIO 2026, FONDO PAZ o el convenio). Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log lo indica.
