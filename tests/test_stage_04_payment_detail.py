@@ -396,6 +396,9 @@ def test_validity_is_taken_only_when_the_contract_is_a_number():
         ("656-1_PROY_PROD_ABC", "PROVEEDORES"),
         ("656-1_SUSTITUCION_ALISTAMIENTO", "PROVEEDORES"),
         ("656-1_caja menor sept", "CM"),
+        ("OFI26-1_DAFP_PROMOTORES_PAGO_1/1", "PROMOTORES"),
+        ("OFI26-1_DAPRE_PAGO_1/1", "PROMOTORES"),
+        ("OFI26-1_DAFT_PAGO_1/1", None),                  # DAFT no es un término (es DAFP)
         ("656-1_REINTEGRO", None),
         ("", None),
     ],
