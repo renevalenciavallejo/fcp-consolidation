@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 4: PERIODO_DE_COBRO se calcula a partir de los meses que menciona CONCEPTO, por nombre completo o abreviatura, y se escribe como texto (no como fórmula): «Febrero de 2026» o, si abarca varios meses, «Febrero a Marzo de 2026» (regla TRA-414). El año es el que sigue al último mes; si CONCEPTO no lo trae, el de FECHA_DE_PAGO. Si no menciona ningún mes, la celda queda vacía y el log lo indica.
 - Etapa 4: cuando la fórmula de CONTRATO da #¡VALOR!, CONTRATO toma el valor del término que contenga CONCEPTO (por ejemplo, DESPLAZAMIENTO → GV, RENTA_BASICA → RB, CAJA MENOR → CM, ADR_PROY_PROD_PIDAR → PIDAR; regla TRA-413), sin distinguir mayúsculas ni tildes. Si contiene varios, gana el más largo. Si no contiene ninguno, se deja la fórmula para ajustarlo manualmente y el log lo indica.
 - Etapa 4: excepción por PROGRAMA en RECURSOS y FUENTE_DE_RECURSOS (reglas TRA-408 y TRA-406). Con Programa 0001 o 0002: PAC JULIO 2026 y PGN; con 0005: RENDIMIENTOS y OTROS; con 0016: CLAUSULA DE APREMIO y OTROS. Con cualquier otro Programa, o sin Programa, se sigue aplicando la relación por Subfideicomiso. El PAC vigente se cambia en un solo lugar (`CURRENT_PAC`).
 - Etapa 4: TIPO_DE_PAGO y NO_BENEFICIARIOS salen de CONCEPTO: si contiene BENEF_<número>_ (por ejemplo BENEF_14_), MASIVO y ese número; si no la contiene, o es BENEF_1_, INDIVIDUAL y 1 (regla TRA-412).

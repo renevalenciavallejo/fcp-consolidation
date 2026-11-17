@@ -32,7 +32,16 @@ from stages.stage_04_payment_detail.config import (
     INDIVIDUAL_BENEFICIARIES,
     INDIVIDUAL_PAYMENT,
     MASS_PAYMENT,
+    MONTH_ABBREVIATION_LENGTH,
+    MONTHS,
+    PAYMENT_DATE_COLUMN,
     PAYMENT_TYPE_COLUMN,
+    PERIOD_COLUMN,
+    PERIOD_END_MARKER,
+    PERIOD_MONTH_RANGE,
+    PERIOD_SEPARATORS,
+    PERIOD_SINGLE_MONTH,
+    PERIOD_YEAR_PATTERN,
     PROGRAM_COLUMN,
     MAX_SUBTRUSTS_IN_NOTE,
     NUMBER_COLUMNS,
@@ -55,6 +64,8 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     assign_generation_year(detail, date.today().year, audit)
     audit.step(f"Asignando {PAYMENT_TYPE_COLUMN} y {BENEFICIARIES_COLUMN}")
     assign_payment_type(detail, audit)
+    audit.step(f"Asignando {PERIOD_COLUMN} según {CONCEPT_COLUMN}")
+    assign_billing_period(detail, audit)
     for relation in SUBTRUST_RELATIONS:
         audit.step(f"Asignando {relation['column']} según el {SUBTRUST_COLUMN}")
         assign_from_subtrust(detail, relation, audit)
@@ -207,6 +218,76 @@ def assign_payment_type(detail: pd.DataFrame, audit: AuditLog) -> None:
         f"con más de {INDIVIDUAL_BENEFICIARIES} beneficiario) y {len(types) - mass} {INDIVIDUAL_PAYMENT} "
         f"(con {INDIVIDUAL_BENEFICIARIES} en {BENEFICIARIES_COLUMN})",
     )
+
+
+def assign_billing_period(detail: pd.DataFrame, audit: AuditLog) -> None:
+    """PERIODO_DE_COBRO según los meses que menciona CONCEPTO. Regla TRA-414.
+
+    Se escribe el texto calculado (no una fórmula de Excel). Si CONCEPTO no menciona ningún
+    mes, o no trae año y FECHA_DE_PAGO está vacía, la celda queda vacía y el log lo indica
+    con ✗, para que el usuario la complete.
+    """
+    values = []
+    year_from_payment_date = 0
+    for concept, payment_date in zip(detail[CONCEPT_COLUMN], detail[PAYMENT_DATE_COLUMN]):
+        period, from_payment_date = billing_period(concept, payment_date)
+        values.append(period)
+        year_from_payment_date += from_payment_date
+    detail[PERIOD_COLUMN] = pd.Series(values, index=detail.index, dtype=object)
+    missing = detail[PERIOD_COLUMN].map(is_empty)
+    detail_text = f"{PERIOD_COLUMN} asignado en {int((~missing).sum())} de {len(detail)} registros"
+    if year_from_payment_date:
+        detail_text += f" ({year_from_payment_date} con el año de {PAYMENT_DATE_COLUMN}, porque {CONCEPT_COLUMN} no lo trae)"
+    audit.transformation("TRA-414", detail_text)
+    audit.note(audit.step_summary())
+    if missing.any():
+        audit.note(
+            f"[TRA-414] {int(missing.sum())} registros sin {PERIOD_COLUMN}: {CONCEPT_COLUMN} no menciona "
+            f"ningún mes (o no trae año y {PAYMENT_DATE_COLUMN} está vacía). Complételos manualmente",
+            ok=False,
+        )
+
+
+def billing_period(concept: object, payment_date: object) -> tuple[str | None, bool]:
+    """Periodo de cobro de un CONCEPTO («Febrero de 2026» o «Febrero a Marzo de 2026»).
+
+    Devuelve el periodo (None si no se encuentra ningún mes o ningún año) y si el año se
+    tomó de FECHA_DE_PAGO.
+    1. Toma CONCEPTO hasta «AUTORIZACION», sin mayúsculas ni tildes, y cambia los
+       separadores (_ - * ' / . ,) por espacios.
+    2. Busca cada mes por su nombre completo al inicio de una palabra (« febrero») o por su
+       abreviatura suelta (« feb »). El mes inicial es el que aparece primero y el final, el
+       que aparece último (cada mes se ubica por su primera aparición).
+    3. El año es el primer número 20xx después del mes final; si no hay, el de FECHA_DE_PAGO.
+    """
+    text = comparable_text(concept)
+    end = text.find(comparable_text(PERIOD_END_MARKER))
+    if end >= 0:
+        text = text[:end]
+    for separator in PERIOD_SEPARATORS:
+        text = text.replace(separator, " ")
+    positions = {}
+    for month in MONTHS:
+        name = comparable_text(month)
+        # Palabra completa: sin letras pegadas antes ni después (sí números, como en «julio2026»).
+        words = f"{name}|{name[:MONTH_ABBREVIATION_LENGTH]}"
+        match = re.search(rf"(?<![a-z])({words})(?![a-z])", text)
+        if match:
+            positions[month] = match.start()
+    if not positions:
+        return None, False
+    start = min(positions, key=positions.get)
+    last = max(positions, key=positions.get)
+    year_match = re.search(PERIOD_YEAR_PATTERN, text[positions[last]:])
+    from_payment_date = year_match is None
+    if year_match:
+        year = year_match.group()
+    elif hasattr(payment_date, "year") and not is_empty(payment_date):
+        year = str(payment_date.year)
+    else:
+        return None, False
+    template = PERIOD_SINGLE_MONTH if start == last else PERIOD_MONTH_RANGE
+    return template.format(start=start, end=last, year=year), from_payment_date
 
 
 def _shown(value: object) -> str:

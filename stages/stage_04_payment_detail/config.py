@@ -255,6 +255,35 @@ MASS_PAYMENT = "MASIVO"             # TIPO_DE_PAGO cuando se encuentra la expres
 INDIVIDUAL_PAYMENT = "INDIVIDUAL"   # TIPO_DE_PAGO cuando no se encuentra, o con BENEF_1_
 INDIVIDUAL_BENEFICIARIES = 1        # NO_BENEFICIARIOS de un pago individual
 
+# PERIODO_DE_COBRO (regla TRA-414). Se calcula en Python a partir de CONCEPTO y se escribe como
+# texto (no como fórmula): «Febrero de 2026» o, si el periodo abarca varios meses, «Febrero a
+# Marzo de 2026». CONCEPTO trae el periodo en formatos muy distintos (1-28-FEBRERO-2026,
+# 01 FEB - 28 FEB 2026, DEL 01 AL 31 DE MARZO DEL 2026, 6_febrero_2026 al 6_marzo_2026...).
+PERIOD_COLUMN = "PERIODO_DE_COBRO"
+PAYMENT_DATE_COLUMN = "FECHA_DE_PAGO"   # De aquí sale el año si CONCEPTO no lo trae
+# Solo se mira CONCEPTO hasta este texto (sin mayúsculas ni tildes): lo que sigue («AUTORIZACION
+# DE PAGO_2026...», facturas) tiene números y palabras como «PAGO» que se confundirían con
+# años y meses («AGO»).
+PERIOD_END_MARKER = "AUTORIZACI"
+# Caracteres que se tratan como espacios, para que «1-28-FEBRERO-2026» y «6_febrero_2026» se
+# lean igual que «01 FEB 2026».
+PERIOD_SEPARATORS = ["_", "-", "*", "'", "/", ".", ","]
+# Meses tal como se escriben en PERIODO_DE_COBRO. En CONCEPTO se buscan como palabra suelta, con
+# el nombre completo (JULIO) o la abreviatura de 3 letras (JUL), sin distinguir mayúsculas ni
+# tildes. Pueden ir pegados a números («JULIO2026»), pero no a otras letras, para no confundir
+# palabras como «PAGO» (AGO) o «MAYOR» (MAYO).
+MONTHS = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+]
+MONTH_ABBREVIATION_LENGTH = 3
+# Año del periodo: el primer número de 4 cifras entre 2000 y 2099 que aparece después del último
+# mes encontrado (expresión regular). Si no hay, se usa el año de FECHA_DE_PAGO.
+PERIOD_YEAR_PATTERN = r"(?<!\d)20\d{2}(?!\d)"
+# Texto de PERIODO_DE_COBRO: con un solo mes y con un rango (primer y último mes que aparecen).
+PERIOD_SINGLE_MONTH = "{start} de {year}"
+PERIOD_MONTH_RANGE = "{start} a {end} de {year}"
+
 # Columna del Detalle de pago con el Subfideicomiso de cada registro, del que salen las
 # columnas de SUBTRUST_RELATIONS.
 SUBTRUST_COLUMN = "SUBFIDEICOMISO"
@@ -469,6 +498,13 @@ RULES = {
         "Asignar TIPO_DE_PAGO y NO_BENEFICIARIOS: si CONCEPTO contiene la expresión "
         "BENEF_<número de beneficiarios>_ (por ejemplo, BENEF_14_), MASIVO y ese número (14). Si no la "
         "contiene, o es BENEF_1_, INDIVIDUAL y 1"
+    ),
+    "TRA-414": (
+        "Asignar PERIODO_DE_COBRO a partir de los meses que menciona CONCEPTO antes de «AUTORIZACION», "
+        "por nombre completo o abreviatura (FEBRERO o FEB): «Febrero de 2026» con un solo mes, o «Febrero "
+        "a Marzo de 2026» con el primer y el último mes si son distintos. El año es el que sigue al "
+        "último mes; si CONCEPTO no lo trae, el de FECHA_DE_PAGO. Si CONCEPTO no menciona ningún mes, "
+        "la celda queda vacía y se informa en el log. Se escribe como texto, no como fórmula"
     ),
     "TRA-407": (
         "Asignar NOMBRE_SUBFIDEICOMISO_PAGO según el SUBFIDEICOMISO de cada registro. Si el "

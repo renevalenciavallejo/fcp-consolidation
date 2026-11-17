@@ -1,6 +1,6 @@
 """Etapa 4: carga del archivo procesado en la Etapa 3 y archivo con el formato del Detalle de pago."""
 
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 
 import pandas as pd
@@ -30,8 +30,10 @@ from stages.stage_04_payment_detail.process import (
     assign_contract_by_concept,
     assign_from_subtrust,
     assign_generation_year,
+    assign_billing_period,
     assign_payment_type,
     assign_validity,
+    billing_period,
     contract_by_concept,
     contract_number,
 )
@@ -119,7 +121,7 @@ def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_04_payment_detail)]
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-405", "TRA-411",
-        "TRA-412",
+        "TRA-412", "TRA-414",
         "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-413", "TRA-409", "TRA-410",
     ]
 
@@ -131,7 +133,7 @@ def test_output_has_the_payment_detail_columns():
     assert [c.value for c in sheet[1]] == DETAIL_COLUMNS
     assert [a.rule for a in result.audit.transformations] == [
         "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405", "TRA-411", "TRA-412",
-        "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-409", "TRA-410",
+        "TRA-414", "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-409", "TRA-410",
     ]
 
 
@@ -513,3 +515,73 @@ def test_output_has_the_payment_detail_format():
     assert sheet.column_dimensions["E"].number_format == ACCOUNTING_FORMAT
     assert sheet.column_dimensions["AC"].number_format == "@"
     assert sheet.column_dimensions["B"].alignment.horizontal == "center"
+
+
+PAYMENT_DATE = datetime(2026, 9, 28)
+
+
+@pytest.mark.parametrize("concept, expected", [
+    # Formatos reales de CONCEPTO (DetallePagoEjemploFormato.xlsx).
+    ("DS_656-1_303_CONTRATO_303-2026_HONORARIOS PERIODO_14-31-ENERO-2026_SEGÚN AUTORIZACION DE PAGO_20260320723422_0_",
+     "Enero de 2026"),
+    ("DS656-1_27_CONTRATO_27-2026_HONORARIOS - PERIODO __23 ENE - 31 ENE 2026__SEGÚN AUTORIZACION DE PAGO_2026032",
+     "Enero de 2026"),
+    ("DS656-1_2_CONTRATO_2-2026_HONORARIOS - PERIODO __DEL 02 AL 28 DE FEBRERO DEL 2026__SEGÚN AUTORIZACION DE PAGO_1",
+     "Febrero de 2026"),
+    ("DS_656-1_945_CONTRATO_945-2026_HONORARIOS PERIODO_1_febrero_2026 al 28_febrero_2026_SEGÚN AUTORIZACION DE PAGO_1",
+     "Febrero de 2026"),
+    ("656-1_267_CONTRATO_267-2026_JURIDICO_6_febrero_2026 al 6_marzo_2026_SEGÚN AUTORIZACION DE PAGO_1__factura_BRIS",
+     "Febrero a Marzo de 2026"),
+    ("DS_656-1_233_CONTRATO_233-2026_HONORARIOS PERIODO_13-ENERO 12-FEBRERO 2026_SEGÚN AUTORIZACION DE PAGO_1",
+     "Enero a Febrero de 2026"),
+    ("DS656-1_233_CONTRATO_233-2026_HONORARIOS - PERIODO __13 ABR - 12 MAY 2026__SEGÚN AUTORIZACION DE PAGO_1",
+     "Abril a Mayo de 2026"),
+    ("DS_656-1_267_CONTRATO_267-2026_FAC-BRIS -63_JURIDICO-6-JUNIO-02-JULIO*2026_SEGÚN AUTORIZACION DE PAGO_1",
+     "Junio a Julio de 2026"),
+    ("656-1_627_CONTRATO_627-2026_JURIDICO_16_marzo_2026 al 30_junio_2026_SEGÚN AUTORIZACION DE PAGO_1", "Marzo a Junio de 2026"),
+    ("DS_656-1_421_CONTRATO_421-2026_JURIDICO_16_julio_2026 al 31_julio2026_SEGÚN AUTORIZACION DE PAGO_1", "Julio de 2026"),
+    # «PAGO» no es agosto (AGO) y «SEGUNDO -PAGO» no corta el texto antes del periodo.
+    ("DS_656-1_386_CONTRATO_386-2026_SEGUNDO -PAGO-JURIDICO-5-JUNIO-AL 30-JULIO-2026_SEGÚN AUTORIZACION DE PAGO_1",
+     "Junio a Julio de 2026"),
+    ("DS_656-1_621_CONTRATO_621-2026_PAGO N. 1 DEL 35%-JURIDICO-24-31-JULIO-2026_SEGÚN AUTORIZACION DE PAGO_1", "Julio de 2026"),
+    # Un día 20 antes del año no se toma como año.
+    ("PERIODO __01 ENE - 20 ENE 2025__SEGÚN AUTORIZACION DE PAGO_2026", "Enero de 2025"),
+    # Sin año en CONCEPTO: el de FECHA_DE_PAGO.
+    ("DS_656-1_816_CONTRATO_816-2026_HONORARIOS PERIODO_1-2-SEPTIEMBRE_SEGÚN AUTORIZACION DE PAGO_20260326437932_0_",
+     "Septiembre de 2026"),
+    # Abreviatura que no va sola (MAYOR) y meses después de AUTORIZACION: no cuentan.
+    ("PAGO MAYOR VALOR_SEGÚN AUTORIZACION DE PAGO_ENERO 2026", None),
+    ("OFI26-019809_COMPARECIENTES__PAGO_3/3_BENEF_190_20260326629662", None),
+    ("DS656-1_472_CONTRATO_472-2026_HONORARIOS - PERIODO __DEL 01 AL 31 DE MAARZZO DEL 2026__SEGÚN AUTORIZACION", None),
+    (None, None),
+])
+def test_billing_period_comes_from_the_concept(concept, expected):
+    assert billing_period(concept, PAYMENT_DATE)[0] == expected
+
+
+def test_billing_period_year_comes_from_the_payment_date_only_when_missing():
+    concept = "HONORARIOS PERIODO_11-31-AGOSTO_SEGÚN AUTORIZACION DE PAGO_20260326497622_0_"
+    assert billing_period(concept, datetime(2025, 9, 1)) == ("Agosto de 2025", True)
+    assert billing_period(concept, None) == (None, False)
+    assert billing_period("PERIODO_1-31-AGOSTO-2026_", datetime(2025, 9, 1)) == ("Agosto de 2026", False)
+
+
+def test_billing_period_is_assigned_and_logged():
+    audit = AuditLog(stage_rules(stage_04_payment_detail))
+    audit.step("Asignando PERIODO_DE_COBRO según CONCEPTO")
+    detail = pd.DataFrame({
+        "CONCEPTO": ["PERIODO_1-28-FEBRERO-2026_", "PERIODO_1-2-SEPTIEMBRE_", "CAJA MENOR", None],
+        "FECHA_DE_PAGO": [PAYMENT_DATE] * 4,
+    }, dtype=object)
+    assign_billing_period(detail, audit)
+    assert list(detail["PERIODO_DE_COBRO"]) == ["Febrero de 2026", "Septiembre de 2026", None, None]
+    audit.finish_step()
+    lines = "\n".join(audit.step_lines())
+    assert "PERIODO_DE_COBRO asignado en 2 de 4 registros (1 con el año de FECHA_DE_PAGO" in lines
+    assert "[TRA-414] 2 registros sin PERIODO_DE_COBRO" in lines
+
+
+def test_billing_period_is_text_in_the_output():
+    sheet = output_sheet(run(stage_3_output()))
+    # El CONCEPTO de prueba (DS_PRUEBA) no menciona meses: la celda queda vacía, sin fórmula.
+    assert sheet["Y2"].value is None

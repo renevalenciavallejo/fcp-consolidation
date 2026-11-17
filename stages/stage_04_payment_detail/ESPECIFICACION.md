@@ -101,7 +101,31 @@ Se busca en CONCEPTO (columna V) la expresión `BENEF_<número de beneficiarios>
 
 La expresión se busca exactamente así: «BENEF» en mayúsculas, con «_» antes y después del número. NO_BENEFICIARIOS se escribe como número. El log de ejecución indica cuántos pagos son masivos y cuántos individuales.
 
-### Paso 7 – NOMBRE_SUBFIDEICOMISO_PAGO (TRA-407, implementado)
+### Paso 7 – PERIODO_DE_COBRO (TRA-414, implementado)
+
+PERIODO_DE_COBRO (columna Y) se calcula en la herramienta a partir de CONCEPTO (columna V) y se escribe como texto, no como fórmula de Excel:
+
+1. Se toma CONCEPTO hasta «AUTORIZACION» (lo que sigue, como «AUTORIZACION DE PAGO_20260320…» o la factura, no se mira), sin distinguir mayúsculas ni tildes, y los separadores `_ - * ' / . ,` se toman como espacios.
+2. Se buscan los meses como palabra suelta, por su nombre completo o su abreviatura de 3 letras (`FEBRERO` o `FEB`). Pueden ir pegados a números (`julio2026`), pero no a otras letras: «PAGO» no es agosto ni «MAYOR» es mayo.
+3. El mes inicial es el que aparece primero y el final, el que aparece último.
+4. El año es el primer número de 2000 a 2099 que aparece después del mes final. Si CONCEPTO no trae año (`1-2-SEPTIEMBRE`), se usa el de FECHA_DE_PAGO.
+
+| CONCEPTO (parte del periodo) | PERIODO_DE_COBRO |
+|---|---|
+| `PERIODO_14-31-ENERO-2026` | Enero de 2026 |
+| `PERIODO __01 FEB - 28 FEB 2026__` | Febrero de 2026 |
+| `PERIODO __DEL 01 AL 31 DE MARZO DEL 2026__` | Marzo de 2026 |
+| `JURIDICO_6_febrero_2026 al 6_marzo_2026` | Febrero a Marzo de 2026 |
+| `JURIDICO_16_marzo_2026 al 30_junio_2026` | Marzo a Junio de 2026 |
+| `PERIODO_1-2-SEPTIEMBRE` (sin año, pagado en 2026) | Septiembre de 2026 |
+
+Si CONCEPTO no menciona ningún mes (por ejemplo, un pago masivo `..._BENEF_190_...` o un mes mal escrito como `MAARZZO`), o no trae año y FECHA_DE_PAGO está vacía, la celda queda vacía y el log de ejecución lo indica con ✗, para completarla manualmente. El log también indica en cuántos registros el año se tomó de FECHA_DE_PAGO.
+
+Con el Detalle de pago de ejemplo (742 registros) el resultado coincide con el valor digitado en 732. Las diferencias son errores de digitación del ejemplo («FEBRERO DE 2026», «Abrilde», doble espacio, «Marzo Junio» sin «a»), un CONCEPTO con el mes mal escrito, un periodo de marzo a junio registrado como «Marzo de 2026» y tres registros con CONCEPTO de mayo registrados como «Junio de 2026».
+
+Un periodo que cruza de un año a otro (diciembre a enero) se escribe con un solo año, el que sigue al mes final («Diciembre a Enero de 2026»); el ejemplo no tiene casos así.
+
+### Paso 8 – NOMBRE_SUBFIDEICOMISO_PAGO (TRA-407, implementado)
 
 La columna R (NOMBRE_SUBFIDEICOMISO_PAGO) se llena según el SUBFIDEICOMISO (columna Q) de cada registro, con esta relación (`SUBTRUST_NAMES` en `config.py`):
 
@@ -138,7 +162,7 @@ La columna R (NOMBRE_SUBFIDEICOMISO_PAGO) se llena según el SUBFIDEICOMISO (col
 
 Los nombres se escriben sin espacios al final (en el Detalle de pago el mismo nombre aparece con y sin espacio final, y Excel los tomaría como valores distintos). Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗, para completarla manualmente. No detiene el proceso.
 
-### Paso 8 – RECURSOS (TRA-408, implementado)
+### Paso 9 – RECURSOS (TRA-408, implementado)
 
 La columna Z (RECURSOS) se llena según el SUBFIDEICOMISO (columna Q) de cada registro, con esta relación (`SUBTRUST_RESOURCES` en `config.py`):
 
@@ -177,7 +201,7 @@ El Programa se compara como código, con sus ceros a la izquierda («1» no es �
 
 «PAC JULIO 2026» es el PAC vigente: cuando cambie, se actualiza solo en `CURRENT_PAC` (`config.py`), que usan los Subfideicomisos y los Programas 0001 y 0002. Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗, para completarla manualmente. No detiene el proceso.
 
-### Paso 9 – FUENTE_DE_RECURSOS (TRA-406, implementado)
+### Paso 10 – FUENTE_DE_RECURSOS (TRA-406, implementado)
 
 La columna AG (FUENTE_DE_RECURSOS) se llena según el SUBFIDEICOMISO (columna Q) de cada registro, con esta relación (`FUNDING_SOURCES` en `config.py`):
 
@@ -195,15 +219,15 @@ La columna AG (FUENTE_DE_RECURSOS) se llena según el SUBFIDEICOMISO (columna Q)
 
 Si el Subfideicomiso no está en la relación o está vacío (y el Programa no tiene excepción), la celda queda vacía y el log de ejecución lo indica con ✗ (cuántos registros y qué Subfideicomisos), para completarla manualmente. No detiene el proceso.
 
-### Paso 10 – VALIDACION (TRA-403, implementado)
+### Paso 11 – VALIDACION (TRA-403, implementado)
 
 La columna K (Diferencia) del ETY corresponde a K (VALIDACION). En el ETY, Diferencia es una fórmula de Excel (regla TRA-101 de la Etapa 1) y su resultado no queda guardado en el archivo mientras no se abra y guarde en Excel, así que su valor no se puede copiar. VALIDACION se escribe en cada fila con la misma fórmula sobre las columnas copiadas: `=E2-F2-G2-H2-I2-J2` (VR_BRUTO − VR_RTEFTE − VR_RETEIVA − VR_RETEICA − VR_TASAS − VR_NETO), igual a la del Detalle de pago. El resultado aparece al abrir el archivo en Excel, con formato de contabilidad en pesos.
 
-### Paso 11 – CONTRATO (TRA-404, implementado)
+### Paso 12 – CONTRATO (TRA-404, implementado)
 
 Una vez copiado CONCEPTO, la columna O (CONTRATO) se escribe en cada fila con la misma fórmula del Detalle de pago (`DetallePagoEjemploFormato.xlsx`), sobre CONCEPTO de la misma fila. Toma el número que sigue a «CONTRATO» (`..._CONTRATO_303-2026_...` → `303`). El resultado aparece al abrir el archivo en Excel. Si CONCEPTO no contiene «CONTRATO», Excel muestra `#¡VALOR!`, igual que en el Detalle de pago.
 
-### Paso 12 – CONTRATO según CONCEPTO cuando la fórmula da #¡VALOR! (TRA-413, implementado)
+### Paso 13 – CONTRATO según CONCEPTO cuando la fórmula da #¡VALOR! (TRA-413, implementado)
 
 En los registros donde la fórmula de CONTRATO da `#¡VALOR!`, se busca en CONCEPTO cada uno de estos términos (`CONTRACT_BY_CONCEPT` en `config.py`). Si CONCEPTO contiene uno, el CONTRATO toma su valor en lugar de la fórmula:
 
@@ -230,7 +254,7 @@ En los registros donde la fórmula de CONTRATO da `#¡VALOR!`, se busca en CONCE
 - Cada CONTRATO asignado queda en Acciones como valor modificado (`#¡VALOR!` → valor).
 - Como el valor asignado no es un número, VIGENCIA (paso 13) queda vacía en esos registros y CONTRATO_2 muestra el valor seguido del guion (por ejemplo `GV-`).
 
-### Paso 13 – VIGENCIA (TRA-409, implementado)
+### Paso 14 – VIGENCIA (TRA-409, implementado)
 
 La columna P (VIGENCIA) se llena así:
 
@@ -239,7 +263,7 @@ La columna P (VIGENCIA) se llena así:
 
 La vigencia se escribe como número. Como CONTRATO es una fórmula de Excel y la herramienta no calcula fórmulas, su resultado se obtiene repitiendo en la herramienta los mismos pasos de la fórmula (`contract_number` en `process.py`); si la fórmula de CONTRATO cambia, hay que actualizar también esa función. El log de ejecución indica en cuántos registros se asignó y en cuántos quedó vacía, y por qué.
 
-### Paso 14 – CONTRATO_2 (TRA-410, implementado)
+### Paso 15 – CONTRATO_2 (TRA-410, implementado)
 
 Después de asignar VIGENCIA, la columna AD (CONTRATO_2) se escribe en cada fila con la misma fórmula del Detalle de pago (`DetallePagoEjemploFormato.xlsx`): `=+CONCATENATE(O2,"-",P2)`, que une CONTRATO y VIGENCIA con un guion (`303` y `2026` → `303-2026`). El resultado aparece al abrir el archivo en Excel. Si VIGENCIA quedó en blanco, Excel muestra el CONTRATO seguido del guion (por ejemplo `#¡VALOR!` o `CONTRATOS-`), igual que en el Detalle de pago.
 
@@ -257,6 +281,7 @@ La configuración de este formato está en `OUTPUT_LAYOUT` (`config.py`). El arc
 ## Tareas manuales
 
 - Completar las columnas que la herramienta deja vacías e importar el archivo generado al Detalle de pago.
+- Completar el PERIODO_DE_COBRO de los registros en que queda vacío (CONCEPTO sin mes reconocible) y revisar los periodos que cruzan de un año a otro.
 - Ajustar el CONTRATO de los registros que siguen mostrando `#¡VALOR!` (CONCEPTO sin ninguno de los términos de la regla TRA-413).
 
 ## Pendiente por especificar
