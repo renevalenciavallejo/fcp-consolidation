@@ -170,6 +170,46 @@ CONTRACT_WORD = "CONTRATO"           # Palabra que busca la fórmula (sin distin
 CONTRACT_PREFIX = "CONTRATO_"        # Texto que quita la fórmula (distingue mayúsculas)
 CONTRACT_SEPARATORS = [" ", "/", "-"]  # Caracteres que la fórmula cambia por «_»
 
+# CONTRATO según CONCEPTO cuando su fórmula da #¡VALOR! (regla TRA-413): término que se busca en
+# CONCEPTO -> valor de CONTRATO. Se busca sin distinguir mayúsculas ni tildes, pero los «_» y los
+# espacios cuentan (por eso algunos términos aparecen con las dos formas). Si CONCEPTO contiene
+# varios términos, gana el más largo (el más específico: «ADR_PROY_PROD_PIDAR» antes que
+# «PROY_PROD»); con el mismo largo, el primero de esta lista. Si no contiene ninguno, la celda
+# conserva la fórmula (#¡VALOR!) para que el usuario la ajuste manualmente.
+CONTRACT_BY_CONCEPT = {
+    "DESPLAZAMIENTO": "GV",
+    "COMPRA_PREDIO": "CP",
+    "COMPRA DEL PREDIO": "CP",
+    "PROY_PROD": "PROVEEDORES",
+    "SEMBRANDO_VIDA": "PP",
+    "SUMINISTROS": "SV",
+    "PENSION": "PS",
+    "BEPS": "PS",
+    "RENTA BASICA": "RB",
+    "RENTA_BASICA": "RB",
+    "ASIGNACION UNICA": "RB",
+    "ASIGNACION_UNICA": "RB",
+    "ASIGNACION MENSUAL": "RB",
+    "ASIGNACION_MENSUAL": "RB",
+    "COMPARECIENTES": "RB",
+    "INGRESO BASICO": "RB",
+    "INGRESO_BASICO": "RB",
+    "DAPRE": "PROMOTORES",
+    "DAFT": "PROMOTORES",
+    "RENHACEMOS": "DECRETO",
+    "RENHA": "DECRETO",
+    "SUSTITUCION_ALISTAMIENTO": "PROVEEDORES",
+    "SUSTITUCION_ASISTENCIA ALIMENTARIA INMEDIATA": "PF",
+    "SUSTITUCION_ATENCIÓN DIFERENCIAL": "ATENCIÓN DIFERENCIAL",
+    "POLIZAS_CONTRATO": "POLIZA",
+    "CAJA_MENOR": "CM",
+    "CAJA MENOR": "CM",
+    "ADR_PROY_PROD_PIDAR": "PIDAR",
+    "ADR__PROY_PROD_PIDAR": "PIDAR",
+}
+CONTRACT_COLUMN = "CONTRATO"
+CONTRACT_ERROR = "#¡VALOR!"   # Lo que muestra Excel cuando la fórmula de CONTRATO no encuentra el contrato
+
 # Columnas con fórmula que usan VIGENCIA: se escriben después de asignarla (mismos datos que
 # FORMULA_COLUMNS). CONTRATO_2 es la fórmula del Detalle de pago (DetallePagoEjemploFormato.xlsx):
 # une CONTRATO y VIGENCIA con un guion (=+CONCATENATE(O2,"-",P2) -> 303-2026).
@@ -452,6 +492,12 @@ RULES = {
     "TRA-404": (
         "Calcular CONTRATO con la fórmula del Detalle de pago, que toma de CONCEPTO el número que sigue "
         "a «CONTRATO» (por ejemplo, «..._CONTRATO_303-2026_...» -> 303; fórmula de Excel en cada fila)"
+    ),
+    "TRA-413": (
+        "Cuando la fórmula de CONTRATO da #¡VALOR!, asignar CONTRATO según el término que contenga "
+        "CONCEPTO (por ejemplo, DESPLAZAMIENTO -> GV, RENTA_BASICA -> RB, CAJA MENOR -> CM), sin "
+        "distinguir mayúsculas ni tildes. Si contiene varios, gana el más largo. Si no contiene ninguno, "
+        "se deja la fórmula (#¡VALOR!) para ajustarlo manualmente"
     ),
     "TRA-409": (
         "Asignar VIGENCIA: si el CONTRATO es un número, se busca en CONCEPTO la expresión "

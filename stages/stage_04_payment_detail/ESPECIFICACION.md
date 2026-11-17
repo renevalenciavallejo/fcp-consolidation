@@ -203,7 +203,34 @@ La columna K (Diferencia) del ETY corresponde a K (VALIDACION). En el ETY, Difer
 
 Una vez copiado CONCEPTO, la columna O (CONTRATO) se escribe en cada fila con la misma fórmula del Detalle de pago (`DetallePagoEjemploFormato.xlsx`), sobre CONCEPTO de la misma fila. Toma el número que sigue a «CONTRATO» (`..._CONTRATO_303-2026_...` → `303`). El resultado aparece al abrir el archivo en Excel. Si CONCEPTO no contiene «CONTRATO», Excel muestra `#¡VALOR!`, igual que en el Detalle de pago.
 
-### Paso 12 – VIGENCIA (TRA-409, implementado)
+### Paso 12 – CONTRATO según CONCEPTO cuando la fórmula da #¡VALOR! (TRA-413, implementado)
+
+En los registros donde la fórmula de CONTRATO da `#¡VALOR!`, se busca en CONCEPTO cada uno de estos términos (`CONTRACT_BY_CONCEPT` en `config.py`). Si CONCEPTO contiene uno, el CONTRATO toma su valor en lugar de la fórmula:
+
+| CONTRATO | Términos en CONCEPTO |
+| --- | --- |
+| GV | DESPLAZAMIENTO |
+| CP | COMPRA_PREDIO, COMPRA DEL PREDIO |
+| PROVEEDORES | PROY_PROD, SUSTITUCION_ALISTAMIENTO |
+| PP | SEMBRANDO_VIDA |
+| SV | SUMINISTROS |
+| PS | PENSION, BEPS |
+| RB | RENTA BASICA, RENTA_BASICA, ASIGNACION UNICA, ASIGNACION_UNICA, ASIGNACION MENSUAL, ASIGNACION_MENSUAL, COMPARECIENTES, INGRESO BASICO, INGRESO_BASICO |
+| PROMOTORES | DAPRE, DAFT |
+| DECRETO | RENHACEMOS, RENHA |
+| PF | SUSTITUCION_ASISTENCIA ALIMENTARIA INMEDIATA |
+| ATENCIÓN DIFERENCIAL | SUSTITUCION_ATENCIÓN DIFERENCIAL |
+| POLIZA | POLIZAS_CONTRATO |
+| CM | CAJA_MENOR, CAJA MENOR |
+| PIDAR | ADR_PROY_PROD_PIDAR, ADR__PROY_PROD_PIDAR |
+
+- La búsqueda no distingue mayúsculas ni tildes, pero sí los guiones bajos y los espacios: `RENTA_BASICA` y `RENTA BASICA` son términos distintos (por eso se listan los dos), y `RENTA-BASICA` no coincide con ninguno.
+- Si CONCEPTO contiene varios términos, gana el más largo, es decir, el más específico: `ADR_PROY_PROD_PIDAR` → PIDAR, aunque también contenga `PROY_PROD`. Con el mismo largo, gana el primero de la tabla.
+- Si no contiene ninguno, la celda conserva la fórmula y Excel sigue mostrando `#¡VALOR!`, para que el usuario lo ajuste manualmente. El log de ejecución indica con ✗ cuántos registros quedaron así.
+- Cada CONTRATO asignado queda en Acciones como valor modificado (`#¡VALOR!` → valor).
+- Como el valor asignado no es un número, VIGENCIA (paso 13) queda vacía en esos registros y CONTRATO_2 muestra el valor seguido del guion (por ejemplo `GV-`).
+
+### Paso 13 – VIGENCIA (TRA-409, implementado)
 
 La columna P (VIGENCIA) se llena así:
 
@@ -212,7 +239,7 @@ La columna P (VIGENCIA) se llena así:
 
 La vigencia se escribe como número. Como CONTRATO es una fórmula de Excel y la herramienta no calcula fórmulas, su resultado se obtiene repitiendo en la herramienta los mismos pasos de la fórmula (`contract_number` en `process.py`); si la fórmula de CONTRATO cambia, hay que actualizar también esa función. El log de ejecución indica en cuántos registros se asignó y en cuántos quedó vacía, y por qué.
 
-### Paso 13 – CONTRATO_2 (TRA-410, implementado)
+### Paso 14 – CONTRATO_2 (TRA-410, implementado)
 
 Después de asignar VIGENCIA, la columna AD (CONTRATO_2) se escribe en cada fila con la misma fórmula del Detalle de pago (`DetallePagoEjemploFormato.xlsx`): `=+CONCATENATE(O2,"-",P2)`, que une CONTRATO y VIGENCIA con un guion (`303` y `2026` → `303-2026`). El resultado aparece al abrir el archivo en Excel. Si VIGENCIA quedó en blanco, Excel muestra el CONTRATO seguido del guion (por ejemplo `#¡VALOR!` o `CONTRATOS-`), igual que en el Detalle de pago.
 
@@ -230,6 +257,7 @@ La configuración de este formato está en `OUTPUT_LAYOUT` (`config.py`). El arc
 ## Tareas manuales
 
 - Completar las columnas que la herramienta deja vacías e importar el archivo generado al Detalle de pago.
+- Ajustar el CONTRATO de los registros que siguen mostrando `#¡VALOR!` (CONCEPTO sin ninguno de los términos de la regla TRA-413).
 
 ## Pendiente por especificar
 

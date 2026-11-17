@@ -10,13 +10,16 @@ from datetime import date
 import pandas as pd
 
 from core.audit import AuditLog, is_empty
-from core.cleaning import normalize_code
+from core.cleaning import comparable_text, normalize_code
 from core.settings import SOURCE_FILE, SOURCE_ROW
 from core.writer import ExcelFormula
 from stages.stage_04_payment_detail.config import (
     BENEFICIARIES_COLUMN,
     BENEFICIARIES_PREFIX,
     COLUMN_MAPPING,
+    CONTRACT_BY_CONCEPT,
+    CONTRACT_COLUMN,
+    CONTRACT_ERROR,
     CONCEPT_COLUMN,
     CONTRACT_PREFIX,
     CONTRACT_SEPARATORS,
@@ -58,6 +61,8 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     for formula in FORMULA_COLUMNS:
         audit.step(f"Calculando {formula['column']}")
         add_formula(detail, formula, audit)
+    audit.step(f"Asignando {CONTRACT_COLUMN} según {CONCEPT_COLUMN} donde la fórmula da {CONTRACT_ERROR}")
+    assign_contract_by_concept(detail, audit)
     audit.step(f"Asignando {VALIDITY_COLUMN}")
     assign_validity(detail, audit)
     for formula in FORMULA_COLUMNS_AFTER_VALIDITY:
@@ -253,6 +258,54 @@ def assign_validity(detail: pd.DataFrame, audit: AuditLog) -> None:
     if not_found:
         detail_text += f" y en {not_found} porque {CONCEPT_COLUMN} no tiene la expresión {CONTRACT_PREFIX}<número>-<vigencia>"
     audit.transformation("TRA-409", detail_text)
+
+
+def assign_contract_by_concept(detail: pd.DataFrame, audit: AuditLog) -> None:
+    """CONTRATO según CONCEPTO en los registros donde su fórmula da #¡VALOR!. Regla TRA-413.
+
+    Si CONCEPTO contiene uno de los términos de CONTRACT_BY_CONCEPT, el valor reemplaza la
+    fórmula (cada cambio queda en Acciones). Si no, la fórmula se conserva y Excel sigue
+    mostrando #¡VALOR!, para que el usuario lo ajuste; el log lo indica con ✗.
+    """
+    error_rows = assigned = 0
+    for index, concept in detail[CONCEPT_COLUMN].items():
+        text = "" if is_empty(concept) else str(concept)
+        if contract_number(text) is not None:
+            continue    # La fórmula encuentra el contrato: no es #¡VALOR!
+        error_rows += 1
+        value = contract_by_concept(text)
+        if value is None:
+            continue
+        assigned += 1
+        detail.at[index, CONTRACT_COLUMN] = value
+        audit.change(
+            detail.at[index, SOURCE_FILE], detail.at[index, SOURCE_ROW], CONTRACT_COLUMN,
+            CONTRACT_ERROR, value, "TRA-413",
+        )
+    audit.note(
+        f"{CONTRACT_COLUMN} da {CONTRACT_ERROR} en {error_rows} de {len(detail)} registros; "
+        f"asignado según {CONCEPT_COLUMN} en {assigned}"
+    )
+    if error_rows > assigned:
+        audit.note(
+            f"[TRA-413] {error_rows - assigned} registros siguen con {CONTRACT_ERROR}: {CONCEPT_COLUMN} "
+            f"no contiene ninguno de los términos. Ajústelos manualmente",
+            ok=False,
+        )
+
+
+def contract_by_concept(concept: str) -> str | None:
+    """Valor de CONTRATO para el término de CONTRACT_BY_CONCEPT que contiene CONCEPTO.
+
+    Compara sin mayúsculas ni tildes (comparable_text), conservando «_» y espacios. Si
+    contiene varios términos, gana el más largo; con el mismo largo, el primero de la lista.
+    """
+    text = comparable_text(concept)
+    found = [term for term in CONTRACT_BY_CONCEPT if comparable_text(term) in text]
+    if not found:
+        return None
+    longest = max(found, key=lambda term: len(comparable_text(term)))
+    return CONTRACT_BY_CONCEPT[longest]
 
 
 def contract_number(concept: str) -> str | None:

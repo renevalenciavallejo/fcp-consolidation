@@ -11,6 +11,7 @@ from openpyxl import load_workbook
 from core.audit import AuditLog
 from core.runner import StageError, file_name_warnings, run_stage, validate_input
 from core.stage import applied_rules, input_specs, stage_rules
+from core.writer import ExcelFormula
 from stages import STAGES, stage_03_ap_voucher_validation, stage_04_payment_detail
 from stages.stage_04_payment_detail.config import (
     ACCOUNTING_FORMAT,
@@ -26,10 +27,12 @@ from stages.stage_04_payment_detail.config import (
 from stages.stage_04_payment_detail.process import (
     add_prefix,
     as_number,
+    assign_contract_by_concept,
     assign_from_subtrust,
     assign_generation_year,
     assign_payment_type,
     assign_validity,
+    contract_by_concept,
     contract_number,
 )
 from tests.helpers import make_xlsx
@@ -117,7 +120,7 @@ def test_applied_rules():
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-405", "TRA-411",
         "TRA-412",
-        "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-409", "TRA-410",
+        "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-413", "TRA-409", "TRA-410",
     ]
 
 
@@ -376,6 +379,50 @@ def test_validity_is_taken_only_when_the_contract_is_a_number():
     lines = "\n".join(audit.step_lines())
     assert "VIGENCIA asignada en 4 de 8 registros; vacía en 3 porque el CONTRATO" in lines
     assert "y en 1 porque CONCEPTO no tiene la expresión CONTRATO_<número>-<vigencia>" in lines
+
+
+@pytest.mark.parametrize(
+    ("concept", "expected"),
+    [
+        ("656-1_DESPLAZAMIENTO_OCTUBRE", "GV"),
+        ("656-1_Renta_Básica_OCT", "RB"),                 # Sin mayúsculas ni tildes
+        ("656-1_PAGO RENTA BASICA OCT", "RB"),           # Con espacio
+        ("656-1_RENTA-BASICA", None),                    # «-» no es «_»: no coincide
+        ("656-1_SUSTITUCION_ATENCION DIFERENCIAL_X", "ATENCIÓN DIFERENCIAL"),
+        ("656-1_ADR_PROY_PROD_PIDAR_841-2024", "PIDAR"),  # Gana el más largo, no PROY_PROD
+        ("656-1_ADR__PROY_PROD_PIDAR_841-2024", "PIDAR"),
+        ("656-1_PROY_PROD_ABC", "PROVEEDORES"),
+        ("656-1_SUSTITUCION_ALISTAMIENTO", "PROVEEDORES"),
+        ("656-1_caja menor sept", "CM"),
+        ("656-1_REINTEGRO", None),
+        ("", None),
+    ],
+)
+def test_contract_by_concept_finds_the_longest_term(concept, expected):
+    assert contract_by_concept(concept) == expected
+
+
+def test_contract_error_is_replaced_by_the_concept_term():
+    audit = AuditLog(stage_rules(stage_04_payment_detail))
+    audit.step("Asignando CONTRATO según CONCEPTO")
+    formula = ExcelFormula("=1", None)
+    concepts = [
+        "DS_656-1_303_CONTRATO_303-2026_HONORARIOS",   # La fórmula da 303: no se toca
+        "656-1_DESPLAZAMIENTO_OCTUBRE",                # #¡VALOR! -> GV
+        "656-1_REINTEGRO",                             # #¡VALOR! sin término: queda la fórmula
+        "656-1_POLIZAS_CONTRATO",                      # #¡VALOR! (sin «_» después) -> POLIZA
+    ]
+    detail = pd.DataFrame(
+        {"_source_file": "ETY.xlsx", "_source_row": [2, 3, 4, 5], "CONCEPTO": concepts, "CONTRATO": formula},
+        dtype=object,
+    )
+    assign_contract_by_concept(detail, audit)
+    assert list(detail["CONTRATO"]) == [formula, "GV", formula, "POLIZA"]
+    lines = "\n".join(audit.step_lines())
+    assert "CONTRATO da #¡VALOR! en 3 de 4 registros; asignado según CONCEPTO en 2" in lines
+    assert "✗ [TRA-413] 1 registros siguen con #¡VALOR!" in lines
+    changes = [(c.source_row, c.old_value, c.new_value) for c in audit.changes]
+    assert changes == [(3, "#¡VALOR!", "GV"), (5, "#¡VALOR!", "POLIZA")]
 
 
 def test_validity_is_empty_without_contract_in_the_concept():
