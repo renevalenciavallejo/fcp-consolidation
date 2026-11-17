@@ -30,6 +30,7 @@ from stages.stage_04_payment_detail.config import (
     INDIVIDUAL_PAYMENT,
     MASS_PAYMENT,
     PAYMENT_TYPE_COLUMN,
+    PROGRAM_COLUMN,
     MAX_SUBTRUSTS_IN_NOTE,
     NUMBER_COLUMNS,
     OUTPUT_LAYOUT,
@@ -132,16 +133,29 @@ def assign_from_subtrust(detail: pd.DataFrame, relation: dict, audit: AuditLog) 
     según su relación (SUBTRUST_RELATIONS). Reglas TRA-407 (NOMBRE_SUBFIDEICOMISO_PAGO),
     TRA-408 (RECURSOS) y TRA-406 (FUENTE_DE_RECURSOS).
 
+    Si la relación tiene excepción por Programa (program_values) y el PROGRAMA del registro
+    está en ella, prevalece el valor del Programa (RECURSOS y FUENTE_DE_RECURSOS).
+
     El Subfideicomiso se compara como código (1002 y «1002» son el mismo). Si no está en
     la relación o está vacío, la celda queda vacía y el log lo indica con ✗, para que el
     usuario la complete; no detiene el proceso.
     """
     column, rule, values = relation["column"], relation["rule"], relation["values"]
+    program_values = relation.get("program_values", {})
     subtrusts = detail[SUBTRUST_COLUMN].map(normalize_code)
+    programs = detail[PROGRAM_COLUMN].map(normalize_code)
+    by_program = programs.map(lambda code: code in program_values)
+    assigned = [
+        program_values[program] if program in program_values else values.get(subtrust)
+        for program, subtrust in zip(programs, subtrusts)
+    ]
     # dtype=object: los vacíos quedan como None, sin que pandas los convierta en NaN.
-    detail[column] = pd.Series([values.get(code) for code in subtrusts], index=detail.index, dtype=object)
+    detail[column] = pd.Series(assigned, index=detail.index, dtype=object)
     missing = detail[column].map(is_empty)
-    audit.transformation(rule, f"{column} asignada en {int((~missing).sum())} de {len(detail)} registros")
+    detail_text = f"{column} asignada en {int((~missing).sum())} de {len(detail)} registros"
+    if program_values:
+        detail_text += f" ({int(by_program.sum())} por la excepción de {PROGRAM_COLUMN})"
+    audit.transformation(rule, detail_text)
     audit.note(audit.step_summary())
     if missing.any():
         unknown = ["(vacío)" if is_empty(code) else code for code in dict.fromkeys(subtrusts[missing])]

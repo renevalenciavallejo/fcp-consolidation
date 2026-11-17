@@ -269,37 +269,40 @@ SUBTRUST_NAMES = {
     "2054": "SERVICIO SOCIAL PARA LA PAZ",
 }
 
-# Relación Subfideicomiso -> recursos (RECURSOS). «PAC JULIO 2026» es el PAC vigente: cuando
-# cambie, se actualiza aquí en todos los Subfideicomisos que lo usan.
+# PAC vigente. Cuando cambie, se actualiza solo aquí: lo usan los Subfideicomisos de
+# SUBTRUST_RESOURCES y los Programas 0001 y 0002 de PROGRAM_EXCEPTIONS.
+CURRENT_PAC = "PAC JULIO 2026"
+
+# Relación Subfideicomiso -> recursos (RECURSOS).
 SUBTRUST_RESOURCES = {
-    "1001": "PAC JULIO 2026",
-    "1002": "PAC JULIO 2026",
-    "1003": "PAC JULIO 2026",
-    "1004": "PAC JULIO 2026",
-    "1005": "PAC JULIO 2026",
-    "1006": "PAC JULIO 2026",
-    "1007": "PAC JULIO 2026",
-    "1008": "PAC JULIO 2026",
-    "1009": "PAC JULIO 2026",
-    "2010": "PAC JULIO 2026",
-    "2011": "PAC JULIO 2026",
+    "1001": CURRENT_PAC,
+    "1002": CURRENT_PAC,
+    "1003": CURRENT_PAC,
+    "1004": CURRENT_PAC,
+    "1005": CURRENT_PAC,
+    "1006": CURRENT_PAC,
+    "1007": CURRENT_PAC,
+    "1008": CURRENT_PAC,
+    "1009": CURRENT_PAC,
+    "2010": CURRENT_PAC,
+    "2011": CURRENT_PAC,
     "2013": "PAC BID PRESTAMO SEP2019",
     "2016": "CENIT",
-    "2017": "PAC JULIO 2026",
+    "2017": CURRENT_PAC,
     "2018": "BID FACILIDAD",
-    "2019": "PAC JULIO 2026",
+    "2019": CURRENT_PAC,
     "2020": "KFW",
     "2021": "AFD",
     "2022": "BID FACILIDAD",
     "2023": "VISIÓN AMAZONIA",
-    "2024": "PAC JULIO 2026",
+    "2024": CURRENT_PAC,
     "2025": "BID FACILIDAD",
     "2026": "BID FACILIDAD",
     "2027": "FONDO PAZ",
     "2028": "FONDO PAZ",
     "2029": "FONDO PAZ",
     "2030": "FONDO PAZ",
-    "2031": "PAC JULIO 2026",
+    "2031": CURRENT_PAC,
     "2032": "FONDO PAZ",
     "2033": "FONDO PAZ",
     "2034": "OTROS RECURSOS ANT",
@@ -307,8 +310,8 @@ SUBTRUST_RESOURCES = {
     "2036": "CONVENIO ART-KFW",
     "2038": "CONVENIO ADR 1141-24",
     "2039": "CONVENIO MADR 2403-25",
-    "2041": "PAC JULIO 2026",
-    "2042": "PAC JULIO 2026",
+    "2041": CURRENT_PAC,
+    "2042": CURRENT_PAC,
     "2043": "CONVENIO ANT 2428-24",
     "2044": "CONVENIO UARIV 2420-24",
     "2045": "CONVENIO RENHACEMOS",
@@ -366,13 +369,35 @@ FUNDING_SOURCES = {
     "2054": "OTROS",
 }
 
+# Columna del Detalle de pago con el Programa de cada registro (texto, con sus ceros).
+PROGRAM_COLUMN = "PROGRAMA"
+
+# Excepción por Programa: si el PROGRAMA de un registro es uno de estos, RECURSOS y
+# FUENTE_DE_RECURSOS toman estos valores y no los de su Subfideicomiso. Con cualquier otro
+# Programa (o sin Programa) se aplica la relación por Subfideicomiso.
+PROGRAM_RESOURCES = {
+    "0001": CURRENT_PAC,
+    "0002": CURRENT_PAC,
+    "0005": "RENDIMIENTOS",
+    "0016": "CLAUSULA DE APREMIO",
+}
+PROGRAM_FUNDING_SOURCES = {
+    "0001": "PGN",
+    "0002": "PGN",
+    "0005": "OTROS",
+    "0016": "OTROS",
+}
+
 # Columnas del Detalle de pago que se llenan según el Subfideicomiso de cada registro, en este
-# orden: regla, columna y relación. Un Subfideicomiso que no está en la relación (o vacío) deja
-# la celda vacía y se informa en el log, para completarla manualmente.
+# orden: regla, columna, relación por Subfideicomiso y, si tiene, la excepción por Programa
+# (que prevalece). Un Subfideicomiso que no está en la relación (o vacío) deja la celda vacía
+# y se informa en el log, para completarla manualmente.
 SUBTRUST_RELATIONS = [
     {"rule": "TRA-407", "column": "NOMBRE_SUBFIDEICOMISO_PAGO", "values": SUBTRUST_NAMES},
-    {"rule": "TRA-408", "column": "RECURSOS", "values": SUBTRUST_RESOURCES},
-    {"rule": "TRA-406", "column": "FUENTE_DE_RECURSOS", "values": FUNDING_SOURCES},
+    {"rule": "TRA-408", "column": "RECURSOS", "values": SUBTRUST_RESOURCES,
+     "program_values": PROGRAM_RESOURCES},
+    {"rule": "TRA-406", "column": "FUENTE_DE_RECURSOS", "values": FUNDING_SOURCES,
+     "program_values": PROGRAM_FUNDING_SOURCES},
 ]
 
 # Máximo de Subfideicomisos sin relación que se listan en el log de ejecución.
@@ -411,12 +436,14 @@ RULES = {
     ),
     "TRA-408": (
         "Asignar RECURSOS según el SUBFIDEICOMISO de cada registro (por ejemplo, PAC JULIO 2026, FONDO PAZ "
-        "o el convenio). Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y "
-        "se informa en el log"
+        "o el convenio). Excepción: con PROGRAMA 0001 o 0002, PAC JULIO 2026; con 0005, RENDIMIENTOS; "
+        "con 0016, CLAUSULA DE APREMIO. Si el Subfideicomiso no está en la relación o está vacío, la "
+        "celda queda vacía y se informa en el log"
     ),
     "TRA-406": (
-        "Asignar FUENTE_DE_RECURSOS (PGN u OTROS) según el SUBFIDEICOMISO de cada registro. Si el "
-        "Subfideicomiso no está en la relación o está vacío, la celda queda vacía y se informa en el log"
+        "Asignar FUENTE_DE_RECURSOS (PGN u OTROS) según el SUBFIDEICOMISO de cada registro. Excepción: "
+        "con PROGRAMA 0001 o 0002, PGN; con 0005 o 0016, OTROS. Si el Subfideicomiso no está en la "
+        "relación o está vacío, la celda queda vacía y se informa en el log"
     ),
     "TRA-403": (
         "Calcular VALIDACION con la misma fórmula de Diferencia del ETY: VR_BRUTO - VR_RTEFTE - VR_RETEIVA "

@@ -165,7 +165,17 @@ La columna Z (RECURSOS) se llena según el SUBFIDEICOMISO (columna Q) de cada re
 | 2049 | CONVENIO 1675 -25 DAFP |
 | 2054 | CONVENIO 764-26 MEN |
 
-«PAC JULIO 2026» es el PAC vigente: cuando cambie, se actualiza en `SUBTRUST_RESOURCES` para todos los Subfideicomisos que lo usan. Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗, para completarla manualmente. No detiene el proceso.
+**Excepción por Programa.** Si el PROGRAMA (columna AA) del registro es uno de estos, RECURSOS toma este valor y no el de su Subfideicomiso (`PROGRAM_RESOURCES` en `config.py`). Con cualquier otro Programa, o sin Programa, se aplica la relación por Subfideicomiso.
+
+| Programa | Recursos |
+| --- | --- |
+| 0001, 0002 | PAC JULIO 2026 |
+| 0005 | RENDIMIENTOS |
+| 0016 | CLAUSULA DE APREMIO |
+
+El Programa se compara como código, con sus ceros a la izquierda («1» no es «0001»). El log de ejecución indica cuántos registros tomaron el valor por la excepción.
+
+«PAC JULIO 2026» es el PAC vigente: cuando cambie, se actualiza solo en `CURRENT_PAC` (`config.py`), que usan los Subfideicomisos y los Programas 0001 y 0002. Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗, para completarla manualmente. No detiene el proceso.
 
 ### Paso 9 – FUENTE_DE_RECURSOS (TRA-406, implementado)
 
@@ -176,7 +186,14 @@ La columna AG (FUENTE_DE_RECURSOS) se llena según el SUBFIDEICOMISO (columna Q)
 | PGN | 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 2010, 2011, 2013, 2017, 2019, 2024, 2031, 2041, 2042 |
 | OTROS | 2016, 2018, 2020, 2021, 2022, 2023, 2025, 2026, 2027, 2028, 2029, 2030, 2032, 2033, 2034, 2035, 2036, 2038, 2039, 2043, 2044, 2045, 2047, 2048, 2049, 2054 |
 
-Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗ (cuántos registros y qué Subfideicomisos), para completarla manualmente. No detiene el proceso.
+**Excepción por Programa.** Si el PROGRAMA (columna AA) del registro es uno de estos, FUENTE_DE_RECURSOS toma este valor y no el de su Subfideicomiso (`PROGRAM_FUNDING_SOURCES` en `config.py`). Con cualquier otro Programa, o sin Programa, se aplica la relación por Subfideicomiso. Es la misma excepción de RECURSOS (paso 8).
+
+| Programa | Fuente |
+| --- | --- |
+| 0001, 0002 | PGN |
+| 0005, 0016 | OTROS |
+
+Si el Subfideicomiso no está en la relación o está vacío (y el Programa no tiene excepción), la celda queda vacía y el log de ejecución lo indica con ✗ (cuántos registros y qué Subfideicomisos), para completarla manualmente. No detiene el proceso.
 
 ### Paso 10 – VALIDACION (TRA-403, implementado)
 

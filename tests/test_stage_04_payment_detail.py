@@ -288,13 +288,55 @@ def test_resources_relation_has_the_same_44_subtrusts():
 def test_unknown_or_empty_subtrust_leaves_funding_source_empty():
     audit = AuditLog(stage_rules(stage_04_payment_detail))
     audit.step("Asignando FUENTE_DE_RECURSOS")
-    detail = pd.DataFrame({"SUBFIDEICOMISO": [2054, "2016", 9999, None], "FUENTE_DE_RECURSOS": None}, dtype=object)
+    detail = pd.DataFrame(
+        {"SUBFIDEICOMISO": [2054, "2016", 9999, None], "PROGRAMA": None, "FUENTE_DE_RECURSOS": None}, dtype=object
+    )
     relation = next(r for r in SUBTRUST_RELATIONS if r["column"] == "FUENTE_DE_RECURSOS")
     assign_from_subtrust(detail, relation, audit)
     assert list(detail["FUENTE_DE_RECURSOS"]) == ["OTROS", "OTROS", None, None]
     lines = "\n".join(audit.step_lines())
     assert "✗ [TRA-406] 2 registros sin FUENTE_DE_RECURSOS" in lines
     assert "(9999, (vacío))" in lines
+
+
+def assign_with_programs(column, subtrusts, programs):
+    """Aplica la relación de la columna a registros con esos Subfideicomisos y Programas."""
+    audit = AuditLog(stage_rules(stage_04_payment_detail))
+    audit.step(f"Asignando {column}")
+    detail = pd.DataFrame({"SUBFIDEICOMISO": subtrusts, "PROGRAMA": programs, column: None}, dtype=object)
+    relation = next(r for r in SUBTRUST_RELATIONS if r["column"] == column)
+    assign_from_subtrust(detail, relation, audit)
+    return list(detail[column]), "\n".join(audit.step_lines())
+
+
+def test_program_exception_prevails_over_the_subtrust():
+    # 2016 es CENIT / OTROS por Subfideicomiso; 1001 es PAC / PGN.
+    subtrusts = [2016, 2016, 1001, 1001, 2016, 2016]
+    programs = ["0001", "0002", "0005", "0016", "0003", None]
+    resources, lines = assign_with_programs("RECURSOS", subtrusts, programs)
+    assert resources == [
+        "PAC JULIO 2026", "PAC JULIO 2026", "RENDIMIENTOS", "CLAUSULA DE APREMIO", "CENIT", "CENIT",
+    ]
+    assert "RECURSOS asignada en 6 de 6 registros (4 por la excepción de PROGRAMA)" in lines
+    sources, _ = assign_with_programs("FUENTE_DE_RECURSOS", subtrusts, programs)
+    assert sources == ["PGN", "PGN", "OTROS", "OTROS", "OTROS", "OTROS"]
+
+
+def test_program_exception_fills_records_with_unknown_subtrust():
+    resources, lines = assign_with_programs("RECURSOS", [9999, None], ["0005", "0001"])
+    assert resources == ["RENDIMIENTOS", "PAC JULIO 2026"]
+    assert "✗" not in lines
+
+
+def test_program_is_compared_with_its_zeros():
+    # «1» no es el Programa «0001»: se aplica la relación por Subfideicomiso.
+    resources, _ = assign_with_programs("RECURSOS", [2016], ["1"])
+    assert resources == ["CENIT"]
+
+
+def test_program_exception_does_not_change_the_subtrust_name():
+    names, _ = assign_with_programs("NOMBRE_SUBFIDEICOMISO_PAGO", [2016], ["0001"])
+    assert names == ["PROGRAMAS DE DESARROLLO CON ENFOQUE TERRITORIAL -PDET"]
 
 
 @pytest.mark.parametrize(

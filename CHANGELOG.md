@@ -4,6 +4,7 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 4: excepción por PROGRAMA en RECURSOS y FUENTE_DE_RECURSOS (reglas TRA-408 y TRA-406). Con Programa 0001 o 0002: PAC JULIO 2026 y PGN; con 0005: RENDIMIENTOS y OTROS; con 0016: CLAUSULA DE APREMIO y OTROS. Con cualquier otro Programa, o sin Programa, se sigue aplicando la relación por Subfideicomiso. El PAC vigente se cambia en un solo lugar (`CURRENT_PAC`).
 - Etapa 4: TIPO_DE_PAGO y NO_BENEFICIARIOS salen de CONCEPTO: si contiene BENEF_<número>_ (por ejemplo BENEF_14_), MASIVO y ese número; si no la contiene, o es BENEF_1_, INDIVIDUAL y 1 (regla TRA-412).
 - Etapa 4: RANGO lleva en todos los registros el año en que se genera el archivo (regla TRA-411).
 - Etapa 4: CONTRATO_2 se escribe en cada fila con la fórmula del Detalle de pago, que une CONTRATO y VIGENCIA con un guion (`=+CONCATENATE(O2,"-",P2)`, regla TRA-410).
