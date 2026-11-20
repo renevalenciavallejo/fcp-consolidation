@@ -21,3 +21,6 @@ errores.log
 
 # Paquetes generados para distribuir (ver README)
 *.zip
+
+# Último valor usado de los parámetros de las etapas (por ejemplo, el PAC vigente)
+parametros.json

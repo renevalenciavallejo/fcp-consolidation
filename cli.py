@@ -5,6 +5,10 @@ Ejemplo:
 
 En una entrada por fecha, cada archivo va precedido de su fecha (aaaa-mm-dd):
     uv run python cli.py --stage 2 --input ety_processed "ety.xlsx" --input treasury_reports 2026-09-28="pagos_28.xlsx"
+
+Los parámetros de una etapa (por ejemplo, el PAC vigente de la Etapa 4) van con --param; si no
+se dan, se usa el último valor usado:
+    uv run python cli.py --stage 4 --input ety_processed "ety.xlsx" --param current_pac "PAC NOVIEMBRE 2026"
 """
 
 import argparse
@@ -13,9 +17,10 @@ from datetime import date
 from pathlib import Path
 
 from core.errors import UNEXPECTED_ERROR_MESSAGE, log_exception
+from core.parameters import save_parameters, saved_parameters
 from core.runner import StageError, run_stage, save_result
 from core.settings import APP_NAME, APP_VERSION
-from core.stage import input_specs
+from core.stage import input_specs, parameter_specs
 from stages import STAGES
 
 
@@ -29,6 +34,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar=("ENTRADA", "ARCHIVO"),
         help="Identificador de la entrada seguido de uno o varios archivos. Se puede repetir.",
+    )
+    parser.add_argument(
+        "--param",
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("PARAMETRO", "VALOR"),
+        help="Valor de un parámetro de la etapa (por defecto, el último usado). Se puede repetir.",
     )
     return parser
 
@@ -71,9 +84,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"No se encontró el archivo: {path}")
                 return 2
 
+    parameters = {**saved_parameters(stage), **dict(args.param)}
+
     print(f"{stage.NAME}")
     try:
-        result = run_stage(stage, files, progress=print)
+        result = run_stage(stage, files, progress=print, parameters=parameters)
         output_path, log_path = save_result(result)
     except StageError as error:
         print(error.message)
@@ -82,12 +97,20 @@ def main(argv: list[str] | None = None) -> int:
         print("Entradas de la etapa:")
         for spec in input_specs(stage):
             print(f"  {spec.key}: {spec.label}")
+        if parameter_specs(stage):
+            print("Parámetros de la etapa:")
+            for spec in parameter_specs(stage):
+                print(f"  {spec.key}: {spec.label}")
         return 1
     except Exception as error:
         log_exception(error)
         print(UNEXPECTED_ERROR_MESSAGE)
         return 1
 
+    try:
+        save_parameters(stage, parameters)
+    except Exception as error:
+        log_exception(error)   # Solo se pierde el valor propuesto para la próxima vez
     for line in result.notice:
         print(line)
     print(f"Archivo procesado: {output_path}")

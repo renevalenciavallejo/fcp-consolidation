@@ -73,6 +73,24 @@ def input_specs(stage: ModuleType) -> list[InputSpec]:
     return specs
 
 
+@dataclass
+class ParameterSpec:
+    """Valor que el usuario escribe al procesar, porque cambia con el tiempo (ver config.PARAMETERS)."""
+
+    key: str
+    label: str      # Texto que ve el usuario
+    default: str    # Valor que se propone si nunca se ha escrito otro
+    help: str = ""  # Explicación corta, debajo del campo
+
+
+def parameter_specs(stage: ModuleType) -> list[ParameterSpec]:
+    """Convierte el diccionario PARAMETERS de la etapa (opcional) en una lista de ParameterSpec."""
+    return [
+        ParameterSpec(key=key, label=data["label"], default=data["default"], help=data.get("help", ""))
+        for key, data in getattr(stage, "PARAMETERS", {}).items()
+    ]
+
+
 def date_label(spec: InputSpec, day: date) -> str:
     """Nombre que ve el usuario para el archivo de una fecha: «Informe de pago del 28 de junio de 2026»."""
     return f"{spec.label} del {day.day} de {MONTH_NAMES[day.month - 1]} de {day.year}"

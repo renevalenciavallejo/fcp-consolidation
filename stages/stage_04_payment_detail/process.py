@@ -24,6 +24,7 @@ from stages.stage_04_payment_detail.config import (
     CONTRACT_PREFIX,
     CONTRACT_SEPARATORS,
     CONTRACT_WORD,
+    CURRENT_PAC,
     VALIDITY_COLUMN,
     FIXED_VALUES,
     FORMULA_COLUMNS,
@@ -52,7 +53,8 @@ from stages.stage_04_payment_detail.config import (
 )
 
 
-def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
+def process(inputs: dict[str, pd.DataFrame], audit: AuditLog, parameters: dict[str, str]) -> pd.DataFrame:
+    """`parameters` trae los valores escritos por el usuario (PARAMETERS), como el PAC vigente."""
     ety = inputs["ety_processed"]
     audit.step("Generando el archivo con la estructura del Detalle de pago")
     detail = empty_payment_detail(ety, audit)
@@ -68,7 +70,7 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     assign_billing_period(detail, audit)
     for relation in SUBTRUST_RELATIONS:
         audit.step(f"Asignando {relation['column']} según el {SUBTRUST_COLUMN}")
-        assign_from_subtrust(detail, relation, audit)
+        assign_from_subtrust(detail, relation, audit, parameters["current_pac"])
     for formula in FORMULA_COLUMNS:
         audit.step(f"Calculando {formula['column']}")
         add_formula(detail, formula, audit)
@@ -144,13 +146,16 @@ def assign_fixed_values(detail: pd.DataFrame, audit: AuditLog) -> None:
     audit.transformation("TRA-405", f"Valores fijos en {len(detail)} registros: {values}")
 
 
-def assign_from_subtrust(detail: pd.DataFrame, relation: dict, audit: AuditLog) -> None:
+def assign_from_subtrust(detail: pd.DataFrame, relation: dict, audit: AuditLog, current_pac: str) -> None:
     """Llena la columna con el valor que le corresponde al SUBFIDEICOMISO de cada registro,
     según su relación (SUBTRUST_RELATIONS). Reglas TRA-407 (NOMBRE_SUBFIDEICOMISO_PAGO),
     TRA-408 (RECURSOS) y TRA-406 (FUENTE_DE_RECURSOS).
 
     Si la relación tiene excepción por Programa (program_values) y el PROGRAMA del registro
     está en ella, prevalece el valor del Programa (RECURSOS y FUENTE_DE_RECURSOS).
+
+    La marca CURRENT_PAC de las relaciones se reemplaza por `current_pac`, el PAC vigente que
+    escribe el usuario al procesar, para no tener que cambiar el código cuando cambia el PAC.
 
     El Subfideicomiso se compara como código (1002 y «1002» son el mismo). Si no está en
     la relación o está vacío, la celda queda vacía y el log lo indica con ✗, para que el
@@ -165,6 +170,7 @@ def assign_from_subtrust(detail: pd.DataFrame, relation: dict, audit: AuditLog) 
         program_values[program] if program in program_values else values.get(subtrust)
         for program, subtrust in zip(programs, subtrusts)
     ]
+    assigned = [current_pac if value == CURRENT_PAC else value for value in assigned]
     # dtype=object: los vacíos quedan como None, sin que pandas los convierta en NaN.
     detail[column] = pd.Series(assigned, index=detail.index, dtype=object)
     missing = detail[column].map(is_empty)

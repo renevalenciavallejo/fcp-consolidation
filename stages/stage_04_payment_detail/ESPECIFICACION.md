@@ -168,7 +168,7 @@ La columna Z (RECURSOS) se llena según el SUBFIDEICOMISO (columna Q) de cada re
 
 | Subfideicomiso | Recursos |
 | --- | --- |
-| 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 2010, 2011, 2017, 2019, 2024, 2031, 2041, 2042 | PAC JULIO 2026 |
+| 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 2010, 2011, 2017, 2019, 2024, 2031, 2041, 2042 | PAC vigente (por ejemplo, PAC JULIO 2026) |
 | 2013 | PAC BID PRESTAMO SEP2019 |
 | 2016 | CENIT |
 | 2018, 2022, 2025, 2026 | BID FACILIDAD |
@@ -193,13 +193,13 @@ La columna Z (RECURSOS) se llena según el SUBFIDEICOMISO (columna Q) de cada re
 
 | Programa | Recursos |
 | --- | --- |
-| 0001, 0002 | PAC JULIO 2026 |
+| 0001, 0002 | PAC vigente |
 | 0005 | RENDIMIENTOS |
 | 0016 | CLAUSULA DE APREMIO |
 
 El Programa se compara como código, con sus ceros a la izquierda («1» no es «0001»). El log de ejecución indica cuántos registros tomaron el valor por la excepción.
 
-«PAC JULIO 2026» es el PAC vigente: cuando cambie, se actualiza solo en `CURRENT_PAC` (`config.py`), que usan los Subfideicomisos y los Programas 0001 y 0002. Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗, para completarla manualmente. No detiene el proceso.
+El PAC vigente cambia con el tiempo (PAC JULIO 2026, PAC NOVIEMBRE 2026, PAC ENERO 2027…), así que no está fijo en el código: el usuario lo escribe en el campo «PAC vigente» de la interfaz antes de procesar (en la CLI, `--param current_pac "PAC NOVIEMBRE 2026"`). La herramienta propone el último valor usado (guardado en `parametros.json`, en la carpeta de la herramienta) o, la primera vez, el de `PARAMETERS` en `config.py`. En las relaciones, la marca `CURRENT_PAC` se reemplaza por ese valor. El log de ejecución indica el PAC usado; si el campo está vacío, no se puede procesar. Si el Subfideicomiso no está en la relación o está vacío, la celda queda vacía y el log de ejecución lo indica con ✗, para completarla manualmente. No detiene el proceso.
 
 ### Paso 10 – FUENTE_DE_RECURSOS (TRA-406, implementado)
 

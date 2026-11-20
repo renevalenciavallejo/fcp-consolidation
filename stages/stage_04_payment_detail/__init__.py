@@ -11,7 +11,9 @@ DESCRIPTION = (
 INPUTS = config.INPUTS
 RULES = config.RULES
 APPLIED_RULES = config.APPLIED_RULES
+# Valores que el usuario escribe al procesar, porque cambian con el tiempo (el PAC vigente).
+PARAMETERS = config.PARAMETERS
 # El archivo de salida toma la estructura y el formato del Detalle de pago, no los del reporte ETY.
 OUTPUT_LAYOUT = config.OUTPUT_LAYOUT
 
-__all__ = ["NAME", "DESCRIPTION", "INPUTS", "RULES", "APPLIED_RULES", "OUTPUT_LAYOUT", "process"]
+__all__ = ["NAME", "DESCRIPTION", "INPUTS", "RULES", "APPLIED_RULES", "PARAMETERS", "OUTPUT_LAYOUT", "process"]

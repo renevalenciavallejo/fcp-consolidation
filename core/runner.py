@@ -21,7 +21,9 @@ from core.cleaning import parse_date
 from core.log_report import InputFileInfo, RunSummary, build_log
 from core.reader import ReadResult, combine, file_name, read_file
 from core.settings import CURRENCY_FORMAT_EXCEL, DATE_FORMAT_TEXT, INPUT_DATE, OUTPUT_DIR
-from core.stage import InputSpec, applied_rules, date_label, input_specs, stage_prefix, stage_rules
+from core.stage import (
+    InputSpec, applied_rules, date_label, input_specs, parameter_specs, stage_prefix, stage_rules,
+)
 from core.writer import SheetStyle, build_output, layout_style
 
 class StageError(Exception):
@@ -86,6 +88,7 @@ def run_stage(
     stage: ModuleType,
     files: StageFiles,
     progress: ProgressCallback | None = None,
+    parameters: dict[str, str] | None = None,
 ) -> StageResult:
     """Ejecuta una etapa completa sobre los archivos dados.
 
@@ -94,6 +97,8 @@ def run_stage(
     valor es un diccionario {fecha: archivo}. Lanza StageError si los archivos no
     cumplen la estructura esperada; en ese caso no se genera ningún resultado.
     `progress` recibe cada línea del log de ejecución mientras avanza.
+    `parameters` tiene los valores que el usuario escribió para los parámetros de la etapa
+    (PARAMETERS); el que no venga toma su valor por defecto.
     """
     started_at = datetime.now()
     start = time.perf_counter()
@@ -115,6 +120,8 @@ def run_stage(
     for spec in specs:
         for warning in file_name_warnings(spec, _files_of(spec, files)):
             audit.note(f"Advertencia: {warning}", ok=False)
+
+    values = check_parameters(stage, parameters or {}, audit)
 
     # 2 y 3. Lectura y validación estricta, archivo por archivo
     read_results: dict[str, list[ReadResult]] = {}
@@ -141,7 +148,8 @@ def run_stage(
     title_rows = remove_title_rows(read_results, audit)
     audit.finish_step()
     # La etapa abre un paso (audit.step) antes de cada regla, para que se vea en el log.
-    output = stage.process(inputs, audit)
+    # Solo las etapas con parámetros los reciben; las demás conservan el contrato de siempre.
+    output = stage.process(inputs, audit, values) if values else stage.process(inputs, audit)
     if not isinstance(output, pd.DataFrame):
         raise TypeError(f"La etapa {stage.__name__} debe devolver un DataFrame en process().")
 
@@ -182,6 +190,39 @@ def run_stage(
     log_bytes = build_log(summary, audit)
     notice = stage.RESULT_NOTICE(audit) if hasattr(stage, "RESULT_NOTICE") else []
     return StageResult(summary, audit, output_name, log_name, output_bytes, log_bytes, notice)
+
+
+def check_parameters(stage: ModuleType, parameters: dict[str, str], audit: AuditLog) -> dict[str, str]:
+    """Valores de los parámetros de la etapa, sin espacios sobrantes, y su registro en el log.
+
+    Un parámetro que no se recibe toma su valor por defecto. Uno que llega vacío, o que la
+    etapa no declara, detiene el proceso sin generar resultados, porque la etapa no podría
+    asignar el valor correcto. Devuelve un diccionario vacío si la etapa no tiene parámetros.
+    """
+    specs = parameter_specs(stage)
+    if not specs and not parameters:
+        return {}
+    audit.step("Revisando los parámetros de la etapa")
+    known = [spec.key for spec in specs]
+    problems = [
+        f"El parámetro '{key}' no existe en esta etapa."
+        + (f" Parámetros válidos: {', '.join(known)}." if known else "")
+        for key in parameters if key not in known
+    ]
+    values = {}
+    for spec in specs:
+        value = parameters.get(spec.key, spec.default)
+        value = " ".join(str(value).split()) if value is not None else ""
+        if not value:
+            problems.append(f"Escriba el valor de «{spec.label}».")
+        values[spec.key] = value
+    if problems:
+        for problem in problems:
+            audit.note(problem, ok=False)
+        raise StageError("Faltan datos para procesar.", problems, audit.step_lines())
+    for spec in specs:
+        audit.note(f"{spec.label}: «{values[spec.key]}»")
+    return values
 
 
 def result_file_names(stage: ModuleType, input_names: list[str]) -> tuple[str, str]:

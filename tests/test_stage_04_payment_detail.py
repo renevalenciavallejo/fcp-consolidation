@@ -297,7 +297,7 @@ def test_unknown_or_empty_subtrust_leaves_funding_source_empty():
         {"SUBFIDEICOMISO": [2054, "2016", 9999, None], "PROGRAMA": None, "FUENTE_DE_RECURSOS": None}, dtype=object
     )
     relation = next(r for r in SUBTRUST_RELATIONS if r["column"] == "FUENTE_DE_RECURSOS")
-    assign_from_subtrust(detail, relation, audit)
+    assign_from_subtrust(detail, relation, audit, "PAC JULIO 2026")
     assert list(detail["FUENTE_DE_RECURSOS"]) == ["OTROS", "OTROS", None, None]
     lines = "\n".join(audit.step_lines())
     assert "✗ [TRA-406] 2 registros sin FUENTE_DE_RECURSOS" in lines
@@ -310,7 +310,7 @@ def assign_with_programs(column, subtrusts, programs):
     audit.step(f"Asignando {column}")
     detail = pd.DataFrame({"SUBFIDEICOMISO": subtrusts, "PROGRAMA": programs, column: None}, dtype=object)
     relation = next(r for r in SUBTRUST_RELATIONS if r["column"] == column)
-    assign_from_subtrust(detail, relation, audit)
+    assign_from_subtrust(detail, relation, audit, "PAC JULIO 2026")
     return list(detail[column]), "\n".join(audit.step_lines())
 
 
@@ -588,3 +588,40 @@ def test_billing_period_is_text_in_the_output():
     sheet = output_sheet(run(stage_3_output()))
     # El CONCEPTO de prueba (DS_PRUEBA) no menciona meses: la celda queda vacía, sin fórmula.
     assert sheet["Y2"].value is None
+
+
+def test_resources_take_the_current_pac_written_by_the_user():
+    # 1002 es un Subfideicomiso del PAC: toma el PAC vigente que escribe el usuario.
+    result = run_stage(
+        stage_04_payment_detail, {"ety_processed": [stage_3_output()]},
+        parameters={"current_pac": "  PAC NOVIEMBRE   2026 "},
+    )
+    sheet = output_sheet(result)
+    assert sheet["Q2"].value == 1002 and sheet["Z2"].value == "PAC NOVIEMBRE 2026"
+    lines = "\n".join(result.audit.step_lines())
+    assert "Revisando los parámetros de la etapa" in lines
+    assert "PAC vigente: «PAC NOVIEMBRE 2026»" in lines
+    # La marca interna nunca llega al archivo de salida.
+    values = [cell.value for row in sheet.iter_rows() for cell in row]
+    assert "<PAC vigente>" not in values
+
+
+def test_program_exception_uses_the_current_pac():
+    audit = AuditLog(stage_rules(stage_04_payment_detail))
+    audit.step("Asignando RECURSOS")
+    detail = pd.DataFrame({"SUBFIDEICOMISO": [2016, 2016], "PROGRAMA": ["0001", "0005"], "RECURSOS": None}, dtype=object)
+    relation = next(r for r in SUBTRUST_RELATIONS if r["column"] == "RECURSOS")
+    assign_from_subtrust(detail, relation, audit, "PAC ENERO 2027")
+    assert list(detail["RECURSOS"]) == ["PAC ENERO 2027", "RENDIMIENTOS"]
+
+
+def test_empty_current_pac_stops_without_results():
+    with pytest.raises(StageError) as error:
+        run_stage(stage_04_payment_detail, {"ety_processed": [stage_3_output()]}, parameters={"current_pac": "  "})
+    assert error.value.problems == ["Escriba el valor de «PAC vigente»."]
+
+
+def test_unknown_parameter_stops_without_results():
+    with pytest.raises(StageError) as error:
+        run_stage(stage_04_payment_detail, {"ety_processed": [stage_3_output()]}, parameters={"pac": "PAC 2027"})
+    assert "El parámetro 'pac' no existe en esta etapa. Parámetros válidos: current_pac." in error.value.problems

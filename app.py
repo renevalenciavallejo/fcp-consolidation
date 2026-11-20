@@ -12,6 +12,7 @@ import streamlit as st
 
 from core.audit import AuditLog
 from core.errors import UNEXPECTED_ERROR_MESSAGE, log_exception
+from core.parameters import save_parameters, saved_parameters
 from core.runner import (
     StageError,
     analyze_date_file,
@@ -21,7 +22,7 @@ from core.runner import (
     validate_input,
 )
 from core.settings import APP_NAME, APP_VERSION, DEFAULT_THEME, DOWNLOAD_BUTTON_COLOR, DOWNLOAD_BUTTON_HOVER_COLOR
-from core.stage import applied_rules, date_label, input_specs, stage_rules
+from core.stage import applied_rules, date_label, input_specs, parameter_specs, stage_rules
 from stages import STAGES
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -408,6 +409,20 @@ for spec in input_specs(stage):
     if has_date_inputs and buttons_area is None:
         buttons_area = st.container()
 
+# Parámetros de la etapa: valores que el usuario escribe porque cambian con el tiempo (por
+# ejemplo, el PAC vigente). Se propone el último valor usado (parametros.json).
+parameters = {}
+for parameter in parameter_specs(stage):
+    widget_key = f"parameter_{stage_index}_{parameter.key}"
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = saved_parameters(stage)[parameter.key]
+    parameters[parameter.key] = st.text_input(parameter.label, key=widget_key)
+    if parameter.help:
+        st.caption(parameter.help)
+    if not parameters[parameter.key].strip():
+        st.error(f"Escriba el valor de «{parameter.label}» para poder procesar.", icon=":material/error:")
+        invalid_inputs.append(parameter.key)
+
 missing_required = bool(incomplete_date_inputs) or bool(invalid_inputs) or any(
     spec.required and not files[spec.key] for spec in input_specs(stage) if not spec.per_date
 )
@@ -448,9 +463,15 @@ def process_files() -> bool:
         with buttons_area, st.spinner("Procesando…"):
             # No se guarda una copia en output/: el usuario descarga los archivos y, si los
             # pierde, se generan de nuevo procesando los mismos archivos.
-            result = run_stage(stage, files, progress=show_line)
+            result = run_stage(stage, files, progress=show_line, parameters=parameters)
         st.session_state.result = result
         st.session_state.result_stage = stage_index
+        try:
+            # Se recuerdan los valores usados para proponerlos la próxima vez.
+            save_parameters(stage, parameters)
+        except Exception as error:
+            # No impide descargar los resultados: solo se pierde el valor propuesto.
+            log_exception(error)
         return True
     except StageError as error:
         problems = "\n".join(f"- {p}" for p in error.problems)
@@ -466,10 +487,11 @@ def process_files() -> bool:
 buttons_row = buttons_area.container(horizontal=True)
 
 # Las entradas por fecha traen {fecha: archivo}; las demás, una lista de archivos.
+# También los parámetros: si el usuario cambia, por ejemplo, el PAC vigente, hay que procesar de nuevo.
 current_files = (stage_index, tuple(
     tuple((day, *file_ids([f])) for day, f in loaded.items()) if isinstance(loaded, dict) else file_ids(loaded)
     for loaded in files.values()
-))
+), tuple(parameters.items()))
 # Si el proceso se detiene, su log queda en la sección de abajo en lugar del log de carga.
 process_failed = False
 if buttons_row.button("Procesar", type="primary", icon=":material/play_arrow:", disabled=missing_required):

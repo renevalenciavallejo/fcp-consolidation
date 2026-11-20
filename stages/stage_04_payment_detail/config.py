@@ -338,9 +338,19 @@ SUBTRUST_NAMES = {
     "2054": "SERVICIO SOCIAL PARA LA PAZ",
 }
 
-# PAC vigente. Cuando cambie, se actualiza solo aquí: lo usan los Subfideicomisos de
-# SUBTRUST_RESOURCES y los Programas 0001 y 0002 de PROGRAM_EXCEPTIONS.
-CURRENT_PAC = "PAC JULIO 2026"
+# Parámetros que el usuario escribe en la interfaz al procesar (o con --param en la CLI),
+# porque cambian con el tiempo. La herramienta propone el último valor usado; «default» es el
+# que se propone si nunca se ha escrito otro.
+PARAMETERS = {
+    "current_pac": {
+        "label": "PAC vigente",
+        "default": "PAC JULIO 2026",
+    },
+}
+
+# Marca que, en SUBTRUST_RESOURCES y PROGRAM_RESOURCES, se reemplaza por el PAC vigente que
+# escribe el usuario (parámetro current_pac). No aparece en el archivo de salida.
+CURRENT_PAC = "<PAC vigente>"
 
 # Relación Subfideicomiso -> recursos (RECURSOS).
 SUBTRUST_RESOURCES = {
@@ -511,8 +521,9 @@ RULES = {
         "Subfideicomiso no está en la relación o está vacío, la celda queda vacía y se informa en el log"
     ),
     "TRA-408": (
-        "Asignar RECURSOS según el SUBFIDEICOMISO de cada registro (por ejemplo, PAC JULIO 2026, FONDO PAZ "
-        "o el convenio). Excepción: con PROGRAMA 0001 o 0002, PAC JULIO 2026; con 0005, RENDIMIENTOS; "
+        "Asignar RECURSOS según el SUBFIDEICOMISO de cada registro (por ejemplo, el PAC vigente, FONDO PAZ "
+        "o el convenio). El PAC vigente se escribe al procesar (por ejemplo, PAC JULIO 2026). Excepción: con "
+        "PROGRAMA 0001 o 0002, el PAC vigente; con 0005, RENDIMIENTOS; "
         "con 0016, CLAUSULA DE APREMIO. Si el Subfideicomiso no está en la relación o está vacío, la "
         "celda queda vacía y se informa en el log"
     ),

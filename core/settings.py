@@ -25,6 +25,10 @@ OUTPUT_DIR = BASE_DIR / "output"
 # Archivo donde se guarda el detalle técnico de los errores inesperados.
 ERROR_LOG_FILE = BASE_DIR / "errores.log"
 
+# Archivo donde se guarda el último valor usado de los parámetros de cada etapa (por ejemplo,
+# el PAC vigente de la Etapa 4), para proponerlo la próxima vez. No se versiona en git.
+PARAMETERS_FILE = BASE_DIR / "parametros.json"
+
 # Severidades de los hallazgos, tal como aparecen en el log.
 ERROR = "Error"              # Requiere corrección manual antes de la siguiente etapa
 WARNING = "Advertencia"      # Revisar
