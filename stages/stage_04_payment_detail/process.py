@@ -10,12 +10,22 @@ from datetime import date
 import pandas as pd
 
 from core.audit import AuditLog, is_empty
-from core.cleaning import comparable_text, normalize_code
+from core.cleaning import clean_text, comparable_text, normalize_code, parse_number
 from core.settings import SOURCE_FILE, SOURCE_ROW
 from core.writer import ExcelFormula
 from stages.stage_04_payment_detail.config import (
     BENEFICIARIES_COLUMN,
     BENEFICIARIES_PREFIX,
+    BUDGET_CONTRACT_COLUMN,
+    BUDGET_PENDING_COLUMN,
+    BUDGET_SOURCE_COLUMN,
+    BUDGET_SOURCES_COLUMN,
+    BUDGET_EMPTY_SOURCE,
+    MAX_CONTRACTS_IN_NOTE,
+    MIN_BUDGET_RECORDS,
+    SOURCE_COUNT,
+    OPTIONAL_COLUMNS,
+    SOURCES_SEPARATOR,
     COLUMN_MAPPING,
     CONTRACT_BY_CONCEPT,
     CONTRACT_COLUMN,
@@ -84,6 +94,8 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog, parameters: dict[s
     for formula in FORMULA_COLUMNS_AFTER_VALIDITY:
         audit.step(f"Calculando {formula['column']}")
         add_formula(detail, formula, audit)
+    audit.step("Buscando las fuentes de recursos en la Ejecución presupuestal")
+    detail = add_budget_sources(detail, inputs["budget_execution"], audit)
     return detail
 
 
@@ -95,7 +107,8 @@ def empty_payment_detail(ety: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
     OUTPUT_LAYOUT. Cada fila conserva el archivo y la fila de origen del registro del
     ETY, para que los hallazgos se puedan ubicar en la salida.
     """
-    columns = list(OUTPUT_LAYOUT["columns"])
+    # Las columnas opcionales (OPTIONAL_COLUMNS) se agregan después, solo si se cargó su entrada.
+    columns = [column for column in OUTPUT_LAYOUT["columns"] if column not in OPTIONAL_COLUMNS]
     detail = pd.DataFrame(None, index=ety.index, columns=columns, dtype=object)
     detail[SOURCE_FILE] = ety[SOURCE_FILE]
     detail[SOURCE_ROW] = ety[SOURCE_ROW]
@@ -451,3 +464,86 @@ def as_number(value: object) -> object:
     if isinstance(value, str) and value.isdigit() and value.isascii() and not value.startswith("0"):
         return int(value)
     return value
+
+
+def add_budget_sources(detail: pd.DataFrame, budget: pd.DataFrame, audit: AuditLog) -> pd.DataFrame:
+    """Columna con las fuentes de recursos de la Ejecución presupuestal. Regla VAL-401.
+
+    La Ejecución presupuestal es opcional: si no se cargó (o no tiene registros), no se
+    agrega la columna y el log lo indica. Si se cargó, por cada registro con CONTRATO
+    numérico se buscan los registros de la Ejecución presupuestal del mismo contrato (el año
+    no cuenta) con PENDIENTE POR PAGAR mayor que 0. Si hay más de uno, aunque sean de la
+    misma fuente, la celda indica cuántos hay de cada fuente («PGN: 2, OTROS: 1»); con uno o
+    ninguno queda vacía (solo se cuenta en el log).
+    """
+    if budget.empty:
+        audit.note("No se cargó la Ejecución presupuestal: no se hace esta validación")
+        return detail
+    sources = pending_sources(budget)
+    values, contracts = [], []
+    without_contract = not_found = single = 0
+    for concept in detail[CONCEPT_COLUMN]:
+        contract = contract_number("" if is_empty(concept) else str(concept))
+        if contract is None or not contract.isdigit():
+            without_contract += 1
+            values.append(None)
+            continue
+        counts = sources.get(_contract_key(contract), {})
+        records = sum(counts.values())
+        if records < MIN_BUDGET_RECORDS:
+            not_found += records == 0
+            single += records == 1
+            values.append(None)
+            continue
+        contracts.append(_contract_key(contract))
+        values.append(SOURCES_SEPARATOR.join(
+            SOURCE_COUNT.format(source=source, count=count) for source, count in counts.items()
+        ))
+    detail[BUDGET_SOURCES_COLUMN] = pd.Series(values, index=detail.index, dtype=object)
+    audit.column_added(BUDGET_SOURCES_COLUMN, "VAL-401", len(contracts))
+    audit.note(
+        f"{BUDGET_SOURCES_COLUMN} asignada en {len(contracts)} de {len(detail)} registros (contrato con "
+        f"más de un registro con {BUDGET_PENDING_COLUMN} mayor que 0); vacía en {single} con un solo "
+        f"registro, en {not_found} sin registros y en {without_contract} sin {CONTRACT_COLUMN} numérico"
+    )
+    if contracts:
+        unique = list(dict.fromkeys(contracts))
+        shown = ", ".join(unique[:MAX_CONTRACTS_IN_NOTE])
+        if len(unique) > MAX_CONTRACTS_IN_NOTE:
+            shown += f" y {len(unique) - MAX_CONTRACTS_IN_NOTE} más"
+        audit.note(
+            f"[VAL-401] {len(contracts)} registros cuyo contrato tiene más de un registro pendiente por "
+            f"pagar en la Ejecución presupuestal ({len(unique)} contratos: {shown}). Revíselos",
+            ok=False,
+        )
+    return detail
+
+
+def pending_sources(budget: pd.DataFrame) -> dict[str, dict[str, int]]:
+    """Número de registros de la Ejecución presupuestal con PENDIENTE POR PAGAR mayor que 0,
+    por contrato y fuente de recursos, en el orden en que aparecen. Regla VAL-401.
+
+    El año del contrato no se tiene en cuenta. Un PENDIENTE POR PAGAR vacío o que no es un
+    número no cuenta.
+    """
+    sources: dict[str, dict[str, int]] = {}
+    for contract, pending, source in zip(
+        budget[BUDGET_CONTRACT_COLUMN], budget[BUDGET_PENDING_COLUMN], budget[BUDGET_SOURCE_COLUMN],
+    ):
+        try:
+            amount = parse_number(pending)
+        except ValueError:
+            continue
+        if amount is None or amount <= 0 or is_empty(contract):
+            continue
+        counts = sources.setdefault(_contract_key(contract), {})
+        text = BUDGET_EMPTY_SOURCE if is_empty(source) else clean_text(str(source)) or BUDGET_EMPTY_SOURCE
+        counts[text] = counts.get(text, 0) + 1
+    return sources
+
+
+def _contract_key(value: object) -> str:
+    """Contrato para comparar: como código, sin ceros a la izquierda si es un número
+    (303, 303.0, «303» y «0303» son el mismo contrato) y sin mayúsculas si tiene letras."""
+    text = normalize_code(value) or ""
+    return str(int(text)) if text.isdigit() and text.isascii() else text.upper()

@@ -25,6 +25,7 @@ from stages.stage_04_payment_detail.config import (
     OUTPUT_LAYOUT,
 )
 from stages.stage_04_payment_detail.process import (
+    add_budget_sources,
     add_prefix,
     as_number,
     assign_contract_by_concept,
@@ -126,7 +127,7 @@ def test_applied_rules():
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-405", "TRA-411",
         "TRA-415", "TRA-412", "TRA-414",
-        "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-413", "TRA-409", "TRA-410",
+        "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-413", "TRA-409", "TRA-410", "VAL-401",
     ]
 
 
@@ -651,3 +652,93 @@ def test_weekly_report_is_required_in_every_run():
         run_stage(stage_04_payment_detail, {"ety_processed": [stage_3_output()]})
     assert error.value.problems == ["Escriba el valor de «Número de la semana (INFORME_SEMANAL)»."]
 
+
+
+# --- Ejecución presupuestal (VAL-401) ---------------------------------------------------
+
+BUDGET_COLUMNS = list(stage_04_payment_detail.INPUTS["budget_execution"]["columns"])
+
+
+def budget_row(contract, year, source, pending):
+    """Registro de la Ejecución presupuestal con contrato, año, fuente y pendiente por pagar."""
+    row = dict.fromkeys(BUDGET_COLUMNS)
+    row.update({"CONTRATO": contract, "AÑO CONTRATO": year,
+                "FUENTE DE RECURSOS FIN_FOR_004": source, "PENDIENTE POR PAGAR": pending})
+    return row
+
+
+def budget_file(rows, columns=None, name="Ejecución Presupuestal.xlsx"):
+    columns = columns or BUDGET_COLUMNS
+    return make_xlsx([columns, *[[row.get(c) for c in columns] for row in rows]],
+                     sheet="Detalle Comprometido", name=name)
+
+
+def test_budget_execution_is_optional_and_column_is_omitted_without_it():
+    result = run(stage_3_output())
+    assert [c.value for c in output_sheet(result)[1]] == DETAIL_COLUMNS
+    assert "No se cargó la Ejecución presupuestal" in "\n".join(result.audit.step_lines())
+
+
+def test_budget_execution_with_other_structure_is_rejected():
+    columns = [c for c in BUDGET_COLUMNS if c != "PENDIENTE POR PAGAR"]
+    with pytest.raises(StageError) as error:
+        validate_input(stage_04_payment_detail, "budget_execution", [budget_file([], columns)])
+    assert any("EST-003" in p for p in error.value.problems)
+    with pytest.raises(StageError):
+        run_stage(stage_04_payment_detail,
+                  {"ety_processed": [stage_3_output()], "budget_execution": [budget_file([], columns)]},
+                  parameters=WEEK)
+
+
+def test_budget_execution_headers_with_line_breaks_are_accepted():
+    columns = [c.replace("Fecha CDP ", "Fecha CDP\n ") for c in BUDGET_COLUMNS]
+    data = validate_input(stage_04_payment_detail, "budget_execution",
+                          [budget_file([budget_row(1, 2017, "PGN", 0)], columns)])
+    assert len(data) == 1
+
+
+def test_budget_sources_count_each_source_when_the_contract_has_more_than_one_record():
+    audit = AuditLog(stage_rules(stage_04_payment_detail))
+    audit.step("Buscando las fuentes de recursos")
+    detail = pd.DataFrame({
+        "CONCEPTO": [
+            "DS_1_303_CONTRATO_303-2026_HONORARIOS",   # Tres registros, dos fuentes (años distintos)
+            "DS_1_008_CONTRATO_008-2025_PAGO",         # Con ceros: dos registros de la misma fuente
+            "DS_1_77_CONTRATO_77-2026_PAGO",           # Un solo registro pendiente: vacía
+            "DS_1_90_CONTRATO_90-2026_PAGO",           # Pendientes en 0 o negativos: vacía
+            "656-1_DESPLAZAMIENTO_OCT",                # Sin contrato numérico
+        ],
+        "CONTRATO": None,
+        "VIGENCIA": None,
+    }, dtype=object)
+    detail["_source_file"], detail["_source_row"] = "ety.xlsx", [2, 3, 4, 5, 6]
+    budget = pd.DataFrame([
+        budget_row(303.0, 2026.0, "PGN", 100.0),
+        budget_row(303.0, 2025.0, "FONDO PAZ (CONVENIO 736-2022)", 5.0),   # El año no cuenta
+        budget_row(303.0, "CANCELADO", "PGN", 1.0),
+        budget_row(303.0, 2026.0, "OTROS", 0.0),          # Pendiente 0: no cuenta
+        budget_row(8.0, "2025", "PGN", 10.0),
+        budget_row("8", 2024.0, "PGN", 3.0),
+        budget_row(77.0, 2026.0, "PGN", 10.0),
+        budget_row(77.0, 2026.0, "PGN", 0.0),
+        budget_row(90.0, 2026.0, "PGN", 0.0),
+        budget_row(90.0, 2026.0, "PGN", -5.0),            # Negativo: no cuenta
+    ], dtype=object)
+    detail = add_budget_sources(detail, budget, audit)
+    assert list(detail["FUENTES_EJECUCION_PRESUPUESTAL"]) == [
+        "PGN: 2, FONDO PAZ (CONVENIO 736-2022): 1", "PGN: 2", None, None, None,
+    ]
+    audit.finish_step()
+    lines = "\n".join(audit.step_lines())
+    assert "asignada en 2 de 5 registros" in lines
+    assert "vacía en 1 con un solo registro, en 1 sin registros y en 1 sin CONTRATO numérico" in lines
+    assert "(2 contratos: 303, 8)" in lines
+
+
+def test_budget_sources_column_is_added_at_the_right():
+    budget = budget_file([budget_row(1, 2026, "PGN", 10)])
+    result = run_stage(stage_04_payment_detail,
+                       {"ety_processed": [stage_3_output()], "budget_execution": [budget]},
+                       parameters=WEEK)
+    assert [c.value for c in output_sheet(result)[1]] == [*DETAIL_COLUMNS, "FUENTES_EJECUCION_PRESUPUESTAL"]
+    assert result.output_file_name == "ETY_sept_E04_procesado.xlsx"

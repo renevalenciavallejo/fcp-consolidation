@@ -73,6 +73,8 @@ Se carga el reporte procesado en la Etapa 3. Al presionar Procesar, la herramien
 
 **PAC vigente:** debajo del cargador hay un campo «PAC vigente» (por ejemplo, PAC JULIO 2026). Es el valor de RECURSOS para los Subfideicomisos del PAC y los Programas 0001 y 0002. Cuando cambie el PAC, escriba el nuevo (por ejemplo, PAC NOVIEMBRE 2026) antes de procesar: la herramienta lo recuerda y lo propone la próxima vez (lo guarda en el archivo `parametros.json` de su carpeta). El valor usado queda en el log de ejecución.
 
+**Ejecución presupuestal (opcional):** debajo del reporte ETY puede cargar la Ejecución presupuestal. Si la carga, se revisa de inmediato que tenga las columnas del archivo de referencia; si no, aparece el error y no se puede procesar. Al procesar, por cada contrato del ETY se buscan en ella los registros del mismo número de contrato (sin importar el año) con saldo pendiente por pagar mayor que 0. Si hay más de uno, aunque sean de la misma fuente, la columna nueva FUENTES_EJECUCION_PRESUPUESTAL, a la derecha, indica cuántos hay de cada fuente (por ejemplo, «PGN: 2»). El log de ejecución lista esos contratos, para revisarlos. Si no la carga, el archivo se genera igual, sin esa columna.
+
 **Número de la semana:** debajo del PAC vigente hay un campo «Número de la semana (INFORME_SEMANAL)». Escriba el número de la semana del informe (por ejemplo, 1010 o 0010): se escribe tal cual, con sus ceros, en la columna INFORME_SEMANAL de todos los registros. Es obligatorio cada vez que procesa: la herramienta no lo recuerda, así que el campo aparece vacío y Procesar no se habilita hasta que lo escriba.
 
 ---

@@ -41,7 +41,74 @@ INPUTS = {
             "Programa": "code",
         },
     },
+    # Ejecución presupuestal (regla VAL-401). Es opcional: sin ella se procesa el ETY sin esa
+    # validación. Si se carga, debe tener la estructura del archivo de referencia (Ejecución
+    # Presupuestal.xlsx, hoja «Detalle Comprometido»); si no la tiene, no se puede procesar.
+    "budget_execution": {
+        "label": "Ejecución presupuestal",
+        "multiple": False,
+        "required": False,
+        "sheet": None,          # None = primera hoja (el nombre no se valida)
+        "header_row": 1,
+        "check_column_order": True,   # Las 33 columnas, en el orden del archivo de referencia
+        # El archivo es grande (unas 23.000 filas) y solo se consultan sus valores: lectura rápida.
+        "fast_read": True,
+        # Columnas del archivo de referencia (A a AG), en orden. Los saltos de línea de los
+        # encabezados («Fecha CDP\n (FCP 2018)») se leen como un espacio.
+        "columns": {
+            "ITEM": "number",
+            "ID SOLICITUD": "code",
+            "TERCERO": "text",
+            "IDENTIFICACION": "code",
+            "CONTRATO": "code",                     # Columna E
+            "AÑO CONTRATO": "code",                 # Columna F
+            "DDP (FIDUCOLDEX)": "code",
+            "CDP (FCP 2018)": "code",
+            "Fecha CDP (FCP 2018)": "date",
+            "CRP (FCP 2018)": "code",
+            "Fecha CRP (FCP 2018)": "date",
+            "CDP (FCP 2019)": "code",
+            "Fecha CDP (FCP 2019)": "date",
+            "CRP (FCP 2019)": "code",
+            "Fecha CRP (FCP 2019)": "date",
+            "FUENTE DE RECURSOS FIN_FOR_004": "text",   # Columna P
+            "RESOLUCION": "text",
+            "SUBCUENTA": "text",
+            "COD SUBCTA": "code",
+            "ORIGEN RECURSOS": "text",
+            "DETALLE OTROS RECURSOS": "text",
+            "POA-PPO (2)": "code",
+            "VIGENCIA RECURSOS": "code",
+            "COD. LÍNEA DE ACCIÓN": "code",
+            "LÍNEA DE ACCIÓN": "text",
+            "COD. ACTIVIDAD": "code",
+            "ACTIVIDAD": "text",
+            "COD. META": "code",
+            "META": "text",
+            "Corresponde al 15% de los recursos del Impuesto al Carbono según Ley 1955 de 2019 - Artículo 10?": "text",
+            "TOTAL COMPROMETIDO": "currency",
+            "TOTAL PAGADO": "currency",
+            "PENDIENTE POR PAGAR": "currency",      # Columna AG
+        },
+    },
 }
+
+# Fuentes de recursos de la Ejecución presupuestal (regla VAL-401). Por cada registro del
+# Detalle de pago con CONTRATO numérico, se buscan en la Ejecución presupuestal los registros
+# del mismo contrato (sin tener en cuenta el año) con PENDIENTE POR PAGAR mayor que 0. Si hay más
+# de uno (aunque sean de la misma fuente), la columna nueva, a la derecha de las del Detalle de
+# pago, indica cuántos hay de cada fuente (SOURCE_COUNT, separadas por SOURCES_SEPARATOR):
+# «PGN: 2, FONDO PAZ (CONVENIO 736-2022): 1». Con uno o ninguno, la celda queda vacía.
+BUDGET_CONTRACT_COLUMN = "CONTRATO"
+BUDGET_PENDING_COLUMN = "PENDIENTE POR PAGAR"
+BUDGET_SOURCE_COLUMN = "FUENTE DE RECURSOS FIN_FOR_004"
+BUDGET_SOURCES_COLUMN = "FUENTES_EJECUCION_PRESUPUESTAL"   # Columna nueva del archivo de salida
+MIN_BUDGET_RECORDS = 2              # Registros encontrados a partir de los cuales se llena la columna
+SOURCE_COUNT = "{source}: {count}"  # Cómo se escribe cada fuente con su número de registros
+SOURCES_SEPARATOR = ", "
+BUDGET_EMPTY_SOURCE = "(vacía)"     # Fuente que se muestra si el registro no tiene fuente
+# Máximo de contratos que se listan en el log de ejecución.
+MAX_CONTRACTS_IN_NOTE = 20
 
 # Formatos de número del archivo Detalle de pago (tal como están en Excel).
 ACCOUNTING_FORMAT = '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)'   # Contabilidad con $
@@ -100,8 +167,14 @@ OUTPUT_LAYOUT = {
         "MULTA": {"width": 7.54, "format": ACCOUNTING_FORMAT, "align": "center"},
         "FUENTE_DE_RECURSOS": {"width": 13, "align": "center"},
         "RANGO": {"width": 7.91, "align": "center"},
+        # No es del Detalle de pago: solo se agrega si se carga la Ejecución presupuestal (VAL-401).
+        "FUENTES_EJECUCION_PRESUPUESTAL": {"width": 40},
     },
 }
+
+# Columnas de OUTPUT_LAYOUT que solo aparecen en el archivo de salida si se carga la entrada
+# opcional de la que salen (columna: entrada).
+OPTIONAL_COLUMNS = {"FUENTES_EJECUCION_PRESUPUESTAL": "budget_execution"}
 
 # Columnas del reporte ETY que se copian, fila por fila y sin cambios, a la columna del
 # Detalle de pago indicada. Las demás columnas del Detalle de pago quedan vacías.
@@ -571,6 +644,14 @@ RULES = {
         "Calcular CONTRATO_2 con la fórmula del Detalle de pago, que une CONTRATO y VIGENCIA con un guion "
         "(por ejemplo, 303-2026; fórmula de Excel en cada fila). Las demás columnas del Detalle de pago "
         "quedan vacías"
+    ),
+    "VAL-401": (
+        "Si se carga la Ejecución presupuestal (opcional), buscar en ella, por cada registro con CONTRATO "
+        "numérico, los registros del mismo CONTRATO (sin tener en cuenta el año) con PENDIENTE POR PAGAR "
+        "mayor que 0. Si hay más de uno, aunque sean de la misma fuente, escribir en la columna nueva "
+        "FUENTES_EJECUCION_PRESUPUESTAL, a la derecha, cuántos hay de cada fuente de recursos (FUENTE DE "
+        "RECURSOS FIN_FOR_004), por ejemplo «PGN: 2, FONDO PAZ (CONVENIO 736-2022): 1». Con uno o ninguno, "
+        "la celda queda vacía"
     ),
 }
 

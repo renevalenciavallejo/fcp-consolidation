@@ -23,6 +23,27 @@ Beneficiario Pago, Identificación, Tercero Principal, FECHA DE PAGO, VR. BRUTO,
 VR. RETEIVA, VR. RETEICA, VR. TASAS, Importe, Diferencia, Asiento, Descripción, LNP, Comprobante,
 Documento, Nº Sec Doc, Más Info, Dpto, Cd Fnd, Subfideicomiso, Cuenta, Proy, Producto, Programa.
 
+### Ejecución presupuestal (opcional)
+
+| Elemento | Valor esperado |
+| --- | --- |
+| Archivo | La Ejecución presupuestal (por ejemplo `Ejecución Presupuestal.xlsx`) |
+| Cantidad | Uno o ninguno: es opcional. Sin ella se procesa el ETY sin la validación VAL-401 |
+| Hoja | La primera hoja del archivo (en el de referencia, «Detalle Comprometido»; el nombre no se valida) |
+| Fila de encabezados | 1 |
+| Datos | Desde la fila 2 |
+| Lectura | Rápida (solo valores), porque tiene unas 23.000 filas |
+
+Si se carga, debe tener la estructura del archivo de referencia: las 33 columnas, exactamente en este orden (los saltos de línea de los encabezados se leen como un espacio). Se valida apenas se carga, con las mismas reglas EST-001 a EST-008 del ETY; si no cumple, los errores aparecen debajo de su campo y no se puede procesar.
+
+ITEM, ID SOLICITUD, TERCERO, IDENTIFICACION, CONTRATO, AÑO CONTRATO, DDP (FIDUCOLDEX), CDP (FCP 2018),
+Fecha CDP (FCP 2018), CRP (FCP 2018), Fecha CRP (FCP 2018), CDP (FCP 2019), Fecha CDP (FCP 2019),
+CRP (FCP 2019), Fecha CRP (FCP 2019), FUENTE DE RECURSOS FIN_FOR_004, RESOLUCION, SUBCUENTA, COD SUBCTA,
+ORIGEN RECURSOS, DETALLE OTROS RECURSOS, POA-PPO (2), VIGENCIA RECURSOS, COD. LÍNEA DE ACCIÓN,
+LÍNEA DE ACCIÓN, COD. ACTIVIDAD, ACTIVIDAD, COD. META, META, Corresponde al 15% de los recursos del
+Impuesto al Carbono según Ley 1955 de 2019 - Artículo 10?, TOTAL COMPROMETIDO, TOTAL PAGADO,
+PENDIENTE POR PAGAR.
+
 ## Reglas
 
 ### Paso 1 – Validación de estructura (implementado)
@@ -275,9 +296,20 @@ La vigencia se escribe como número. Como CONTRATO es una fórmula de Excel y la
 
 Después de asignar VIGENCIA, la columna AD (CONTRATO_2) se escribe en cada fila con la misma fórmula del Detalle de pago (`DetallePagoEjemploFormato.xlsx`): `=+CONCATENATE(O2,"-",P2)`, que une CONTRATO y VIGENCIA con un guion (`303` y `2026` → `303-2026`). El resultado aparece al abrir el archivo en Excel. Si VIGENCIA quedó en blanco, Excel muestra el CONTRATO seguido del guion (por ejemplo `#¡VALOR!` o `CONTRATOS-`), igual que en el Detalle de pago.
 
+### Paso 16 – Fuentes de recursos de la Ejecución presupuestal (VAL-401, implementado)
+
+Solo si se cargó la Ejecución presupuestal. Su objetivo es identificar contratos con más de un registro pendiente por pagar y sus fuentes de recursos.
+
+1. Por cada registro con CONTRATO numérico (columna O, el resultado de su fórmula), se buscan en la Ejecución presupuestal los registros con el mismo CONTRATO (columna E) y PENDIENTE POR PAGAR (columna AG) **mayor que 0**. Solo se compara el número de contrato: el año (AÑO CONTRATO y VIGENCIA) no se tiene en cuenta. El contrato se compara como número (303, «303» y 0303 son el mismo); un PENDIENTE POR PAGAR vacío, en 0, negativo o que no es un número no cuenta.
+2. Si se encuentra **más de un registro**, aunque sean de la misma fuente, la columna nueva **FUENTES_EJECUCION_PRESUPUESTAL**, a la derecha de RANGO, indica cuántos registros hay de cada fuente de recursos (FUENTE DE RECURSOS FIN_FOR_004, columna P), en el orden en que aparecen y separadas por coma: `PGN: 2`, `PGN: 2, FONDO PAZ (CONVENIO 736-2022): 1`.
+3. Si se encuentra uno o ninguno, o el registro no tiene CONTRATO numérico, la celda queda vacía; el log de ejecución solo indica cuántos.
+4. El log de ejecución lista con ✗ los contratos con la columna llena, para revisarlos.
+
+Si no se carga la Ejecución presupuestal, la columna no se agrega y el log lo indica.
+
 ## Archivo de salida
 
-- Hoja `Hoja1` con las 34 columnas del Detalle de pago, en este orden: ITEM, IDENTIFICACION, TERCERO, FECHA_DE_PAGO, VR_BRUTO, VR_RTEFTE, VR_RETEIVA, VR_RETEICA, VR_TASAS, VR_NETO, VALIDACION, ASIENTO, COMPROBANTE, NO_SEC_DOC, CONTRATO, VIGENCIA, SUBFIDEICOMISO, NOMBRE_SUBFIDEICOMISO_PAGO, CUENTA, TIPO_DE_PAGO, NO_BENEFICIARIOS, CONCEPTO, FIDUCIARIA_QUE_EFECTUO_EL_PAGO, INFORME_SEMANAL, PERIODO_DE_COBRO, RECURSOS, PROGRAMA, GL, Q_PAGOS, CONTRATO_2, AMORTIZACION_ANTICIPO, MULTA, FUENTE_DE_RECURSOS, RANGO.
+- Hoja `Hoja1` con las 34 columnas del Detalle de pago, en este orden: ITEM, IDENTIFICACION, TERCERO, FECHA_DE_PAGO, VR_BRUTO, VR_RTEFTE, VR_RETEIVA, VR_RETEICA, VR_TASAS, VR_NETO, VALIDACION, ASIENTO, COMPROBANTE, NO_SEC_DOC, CONTRATO, VIGENCIA, SUBFIDEICOMISO, NOMBRE_SUBFIDEICOMISO_PAGO, CUENTA, TIPO_DE_PAGO, NO_BENEFICIARIOS, CONCEPTO, FIDUCIARIA_QUE_EFECTUO_EL_PAGO, INFORME_SEMANAL, PERIODO_DE_COBRO, RECURSOS, PROGRAMA, GL, Q_PAGOS, CONTRATO_2, AMORTIZACION_ANTICIPO, MULTA, FUENTE_DE_RECURSOS, RANGO. Si se carga la Ejecución presupuestal, además FUENTES_EJECUCION_PRESUPUESTAL (columna AI, regla VAL-401).
 - Encabezados: Calibri 11 en negrita, letra blanca sobre azul (verde en VIGENCIA y PROGRAMA), centrados, con ajuste de texto y bordes finos; fila de 58 de alto.
 - Anchos de columna iguales a los del Detalle de pago.
 - Formatos de celda de cada columna (en las filas copiadas y en la columna completa, para los datos que se agreguen): ITEM con número entero, FECHA_DE_PAGO como fecha (`d/mm/aaaa`), los valores (VR_BRUTO a VALIDACION, AMORTIZACION_ANTICIPO y MULTA) con formato de contabilidad en pesos, Q_PAGOS como texto y las demás generales; Calibri 11 y centrados, salvo TERCERO, VR_BRUTO a VR_NETO y CONCEPTO.
@@ -288,6 +320,7 @@ La configuración de este formato está en `OUTPUT_LAYOUT` (`config.py`). El arc
 
 ## Tareas manuales
 
+- Revisar los contratos con más de un registro pendiente por pagar en la Ejecución presupuestal (columna FUENTES_EJECUCION_PRESUPUESTAL, listados en el log).
 - Completar las columnas que la herramienta deja vacías e importar el archivo generado al Detalle de pago.
 - Completar el PERIODO_DE_COBRO de los registros en que queda vacío (CONCEPTO sin mes reconocible) y revisar los periodos que cruzan de un año a otro.
 - Ajustar el CONTRATO de los registros que siguen mostrando `#¡VALOR!` (CONCEPTO sin ninguno de los términos de la regla TRA-413).

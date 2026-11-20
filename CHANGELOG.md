@@ -2,6 +2,10 @@
 
 Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
+## Sin publicar
+
+- Etapa 4: nuevo campo opcional «Ejecución presupuestal». Si se carga, se valida apenas se carga que tenga la estructura del archivo de referencia (las 33 columnas en orden, encabezados en la fila 1); si no la tiene, no se puede procesar. Al procesar, por cada registro con CONTRATO numérico se buscan en ella los registros del mismo CONTRATO (sin tener en cuenta el año) con PENDIENTE POR PAGAR mayor que 0; si hay más de uno, aunque sean de la misma fuente, la columna nueva FUENTES_EJECUCION_PRESUPUESTAL, a la derecha, indica cuántos hay de cada fuente de recursos (por ejemplo, «PGN: 2, FONDO PAZ (CONVENIO 736-2022): 1»; regla VAL-401). Con uno o ninguno, la celda queda vacía. El log lista esos contratos. Sin el archivo, la columna no se agrega.
+
 ## 1.3.0 – 2026-11-20
 
 - Etapa 1: los registros de reprogramación, cuyo Más Info contiene «REPR» (por ejemplo, REPR o Reprogramación, sin distinguir mayúsculas ni tildes), se señalan como Advertencia: la celda de Más Info queda en amarillo, como el Comprobante repetido, con la acción «Revisar el registro de reprogramación» (regla VAL-103). No se cambia ni se elimina nada.
