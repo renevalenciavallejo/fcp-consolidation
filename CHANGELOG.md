@@ -2,7 +2,7 @@
 
 Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
-## Sin publicar
+## 1.1.0 – 2026-11-20
 
 - Etapa 4: el PAC vigente (valor de RECURSOS para los Subfideicomisos del PAC y los Programas 0001 y 0002) ya no está fijo en el código: se escribe en el campo «PAC vigente» de la interfaz (o con `--param current_pac` en la CLI). La herramienta propone el último valor usado, que guarda en `parametros.json`, y lo deja en el log de ejecución. Si el campo queda vacío, no se puede procesar.
 - Núcleo: las etapas pueden declarar parámetros (`PARAMETERS`), valores que el usuario escribe al procesar porque cambian con el tiempo.

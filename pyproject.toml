@@ -1,6 +1,6 @@
 [project]
 name = "fcp-consolidation"
-version = "1.0.0"
+version = "1.1.0"
 description = "Herramienta local para procesar por etapas los archivos de Excel de la consolidación del informe de ejecución presupuestal y financiera del FCP."
 readme = "README.md"
 authors = [
