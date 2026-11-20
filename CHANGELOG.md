@@ -2,7 +2,7 @@
 
 Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
-## Sin publicar
+## 1.3.0 – 2026-11-20
 
 - Etapa 1: los registros de reprogramación, cuyo Más Info contiene «REPR» (por ejemplo, REPR o Reprogramación, sin distinguir mayúsculas ni tildes), se señalan como Advertencia: la celda de Más Info queda en amarillo, como el Comprobante repetido, con la acción «Revisar el registro de reprogramación» (regla VAL-103). No se cambia ni se elimina nada.
 
