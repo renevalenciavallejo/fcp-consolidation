@@ -61,8 +61,12 @@ def stage_3_output():
     return file
 
 
+# Número de la semana que se escribe al procesar (obligatorio, sin valor por defecto).
+WEEK = {"weekly_report": "1010"}
+
+
 def run(*files):
-    return run_stage(stage_04_payment_detail, {"ety_processed": list(files)})
+    return run_stage(stage_04_payment_detail, {"ety_processed": list(files)}, parameters=WEEK)
 
 
 def output_sheet(result):
@@ -121,7 +125,7 @@ def test_applied_rules():
     codes = [code for code, _ in applied_rules(stage_04_payment_detail)]
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008", "TRA-401", "TRA-402", "TRA-405", "TRA-411",
-        "TRA-412", "TRA-414",
+        "TRA-415", "TRA-412", "TRA-414",
         "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-413", "TRA-409", "TRA-410",
     ]
 
@@ -132,8 +136,8 @@ def test_output_has_the_payment_detail_columns():
     assert sheet.title == "Hoja1"
     assert [c.value for c in sheet[1]] == DETAIL_COLUMNS
     assert [a.rule for a in result.audit.transformations] == [
-        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405", "TRA-411", "TRA-412",
-        "TRA-414", "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-409", "TRA-410",
+        "TRA-401", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-402", "TRA-405", "TRA-411", "TRA-415",
+        "TRA-412", "TRA-414", "TRA-407", "TRA-408", "TRA-406", "TRA-403", "TRA-404", "TRA-409", "TRA-410",
     ]
 
 
@@ -155,7 +159,7 @@ def test_ety_values_are_copied_row_by_row_without_changes():
             assert cell.value == expected, (row, detail_column)
     # Las columnas sin correspondencia quedan vacías.
     filled = [
-        *COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO", "VIGENCIA", "CONTRATO_2", "RANGO",
+        *COLUMN_MAPPING.values(), *FIXED_VALUES, "VALIDACION", "CONTRATO", "VIGENCIA", "CONTRATO_2", "RANGO", "INFORME_SEMANAL",
         "TIPO_DE_PAGO", "NO_BENEFICIARIOS",
         *[relation["column"] for relation in SUBTRUST_RELATIONS],
     ]
@@ -594,7 +598,7 @@ def test_resources_take_the_current_pac_written_by_the_user():
     # 1002 es un Subfideicomiso del PAC: toma el PAC vigente que escribe el usuario.
     result = run_stage(
         stage_04_payment_detail, {"ety_processed": [stage_3_output()]},
-        parameters={"current_pac": "  PAC NOVIEMBRE   2026 "},
+        parameters={"current_pac": "  PAC NOVIEMBRE   2026 ", **WEEK},
     )
     sheet = output_sheet(result)
     assert sheet["Q2"].value == 1002 and sheet["Z2"].value == "PAC NOVIEMBRE 2026"
@@ -617,11 +621,33 @@ def test_program_exception_uses_the_current_pac():
 
 def test_empty_current_pac_stops_without_results():
     with pytest.raises(StageError) as error:
-        run_stage(stage_04_payment_detail, {"ety_processed": [stage_3_output()]}, parameters={"current_pac": "  "})
+        run_stage(stage_04_payment_detail, {"ety_processed": [stage_3_output()]}, parameters={"current_pac": "  ", **WEEK})
     assert error.value.problems == ["Escriba el valor de «PAC vigente»."]
 
 
 def test_unknown_parameter_stops_without_results():
     with pytest.raises(StageError) as error:
-        run_stage(stage_04_payment_detail, {"ety_processed": [stage_3_output()]}, parameters={"pac": "PAC 2027"})
-    assert "El parámetro 'pac' no existe en esta etapa. Parámetros válidos: current_pac." in error.value.problems
+        run_stage(stage_04_payment_detail, {"ety_processed": [stage_3_output()]}, parameters={"pac": "PAC 2027", **WEEK})
+    assert "El parámetro 'pac' no existe en esta etapa. Parámetros válidos: current_pac, weekly_report." in error.value.problems
+
+
+def test_weekly_report_takes_the_week_written_by_the_user():
+    result = run_stage(
+        stage_04_payment_detail, {"ety_processed": [stage_3_output()]}, parameters={"weekly_report": " 0010 "},
+    )
+    sheet = output_sheet(result)
+    column = [c.value for c in sheet[1]].index("INFORME_SEMANAL") + 1
+    cells = [row[column - 1] for row in sheet.iter_rows(min_row=2)]
+    # Texto, tal como lo escribe el usuario: conserva los ceros a la izquierda.
+    assert cells and all(cell.value == "0010" and cell.number_format == "@" for cell in cells)
+    lines = "\n".join(result.audit.step_lines())
+    assert "Número de la semana (INFORME_SEMANAL): «0010»" in lines
+    assert "Asignando INFORME_SEMANAL" in lines
+
+
+def test_weekly_report_is_required_in_every_run():
+    # Sin el número de la semana no se procesa: no tiene valor por defecto.
+    with pytest.raises(StageError) as error:
+        run_stage(stage_04_payment_detail, {"ety_processed": [stage_3_output()]})
+    assert error.value.problems == ["Escriba el valor de «Número de la semana (INFORME_SEMANAL)»."]
+

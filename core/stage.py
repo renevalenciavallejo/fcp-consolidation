@@ -81,12 +81,20 @@ class ParameterSpec:
     label: str      # Texto que ve el usuario
     default: str    # Valor que se propone si nunca se ha escrito otro
     help: str = ""  # Explicación corta, debajo del campo
+    # False: no se guarda el último valor usado; el usuario lo escribe en cada procesamiento.
+    remember: bool = True
 
 
 def parameter_specs(stage: ModuleType) -> list[ParameterSpec]:
     """Convierte el diccionario PARAMETERS de la etapa (opcional) en una lista de ParameterSpec."""
     return [
-        ParameterSpec(key=key, label=data["label"], default=data["default"], help=data.get("help", ""))
+        ParameterSpec(
+            key=key,
+            label=data["label"],
+            default=data.get("default", ""),
+            help=data.get("help", ""),
+            remember=data.get("remember", True),
+        )
         for key, data in getattr(stage, "PARAMETERS", {}).items()
     ]
 

@@ -89,6 +89,14 @@ A todos los registros se les asignan los mismos valores que tienen todos los reg
 
 A todos los registros se les asigna en la columna AH (RANGO) el año en que se genera el archivo (el del día en que se presiona Procesar), como número. Por ejemplo, un archivo generado el 13 de noviembre de 2026 lleva 2026 en todos los registros.
 
+### Paso 5.1 – INFORME_SEMANAL (TRA-415, implementado)
+
+A todos los registros se les asigna en la columna X (INFORME_SEMANAL) el número de la semana que el usuario escribe en el campo «Número de la semana (INFORME_SEMANAL)», debajo del campo «PAC vigente» (en la CLI, `--param weekly_report 1010`). Se escribe como texto, tal como lo digita el usuario, para conservar los ceros a la izquierda (por ejemplo, 1010 o 0010); la columna tiene formato de texto.
+
+- Es obligatorio en **cada** procesamiento: a diferencia del PAC vigente, la herramienta no lo guarda ni lo propone la próxima vez. El campo empieza vacío y se vacía con «Nuevo procesamiento».
+- Mientras el campo esté vacío, Procesar queda deshabilitado (sin mensaje adicional, para no saturar la pantalla).
+- El log de ejecución indica el número usado.
+
 ### Paso 6 – TIPO_DE_PAGO y NO_BENEFICIARIOS (TRA-412, implementado)
 
 Se busca en CONCEPTO (columna V) la expresión `BENEF_<número de beneficiarios>_`:

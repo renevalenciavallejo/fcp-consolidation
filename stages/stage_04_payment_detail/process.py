@@ -50,6 +50,7 @@ from stages.stage_04_payment_detail.config import (
     SUBTRUST_COLUMN,
     SUBTRUST_RELATIONS,
     VALUE_PREFIXES,
+    WEEKLY_REPORT_COLUMN,
 )
 
 
@@ -64,6 +65,8 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog, parameters: dict[s
     assign_fixed_values(detail, audit)
     audit.step(f"Asignando {GENERATION_YEAR_COLUMN}")
     assign_generation_year(detail, date.today().year, audit)
+    audit.step(f"Asignando {WEEKLY_REPORT_COLUMN}")
+    assign_weekly_report(detail, parameters["weekly_report"], audit)
     audit.step(f"Asignando {PAYMENT_TYPE_COLUMN} y {BENEFICIARIES_COLUMN}")
     assign_payment_type(detail, audit)
     audit.step(f"Asignando {PERIOD_COLUMN} según {CONCEPT_COLUMN}")
@@ -199,6 +202,14 @@ def assign_generation_year(detail: pd.DataFrame, year: int, audit: AuditLog) -> 
     """
     detail[GENERATION_YEAR_COLUMN] = [year] * len(detail)
     audit.transformation("TRA-411", f"{GENERATION_YEAR_COLUMN} = {year} (año de generación) en {len(detail)} registros")
+
+
+def assign_weekly_report(detail: pd.DataFrame, week: str, audit: AuditLog) -> None:
+    """INFORME_SEMANAL: el número de la semana que escribe el usuario, igual en todos los
+    registros. Regla TRA-415. Se escribe como texto para conservar los ceros a la izquierda
+    (0010); el ejecutor ya verificó que no esté vacío."""
+    detail[WEEKLY_REPORT_COLUMN] = [week] * len(detail)
+    audit.transformation("TRA-415", f"{WEEKLY_REPORT_COLUMN} = {week} en {len(detail)} registros")
 
 
 def assign_payment_type(detail: pd.DataFrame, audit: AuditLog) -> None:

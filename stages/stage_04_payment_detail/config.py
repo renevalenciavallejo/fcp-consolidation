@@ -88,7 +88,8 @@ OUTPUT_LAYOUT = {
         "NO_BENEFICIARIOS": {"width": 10.63, "align": "center"},
         "CONCEPTO": {"width": 88.27},
         "FIDUCIARIA_QUE_EFECTUO_EL_PAGO": {"width": 14.63, "align": "center"},
-        "INFORME_SEMANAL": {"width": 10.63, "align": "center"},
+        # Texto: el número de la semana se escribe tal como lo digita el usuario (0010 conserva sus ceros).
+        "INFORME_SEMANAL": {"width": 10.63, "format": TEXT_FORMAT, "align": "center"},
         "PERIODO_DE_COBRO": {"width": 22.36, "align": "center"},
         "RECURSOS": {"width": 14.63, "align": "center"},
         "PROGRAMA": {"width": 10.82, "align": "center", "header_fill": HEADER_GREEN},
@@ -244,6 +245,10 @@ FIXED_VALUES = {
 # como número (por ejemplo, 2026). Es el mismo en todos los registros.
 GENERATION_YEAR_COLUMN = "RANGO"
 
+# INFORME_SEMANAL (regla TRA-415): número de la semana que el usuario escribe al procesar
+# (parámetro weekly_report), igual en todos los registros y como texto (por ejemplo, 1010 o 0010).
+WEEKLY_REPORT_COLUMN = "INFORME_SEMANAL"
+
 # TIPO_DE_PAGO y NO_BENEFICIARIOS (regla TRA-412). Si CONCEPTO contiene la expresión
 # BENEF_<número de beneficiarios>_ (por ejemplo BENEF_14_), el pago es masivo y el número de
 # beneficiarios es ese número. Si no la contiene, o el número es 1 (BENEF_1_), el pago es
@@ -340,11 +345,17 @@ SUBTRUST_NAMES = {
 
 # Parámetros que el usuario escribe en la interfaz al procesar (o con --param en la CLI),
 # porque cambian con el tiempo. La herramienta propone el último valor usado; «default» es el
-# que se propone si nunca se ha escrito otro.
+# que se propone si nunca se ha escrito otro. «remember»: False = no se guarda; el usuario lo
+# escribe en cada procesamiento.
 PARAMETERS = {
     "current_pac": {
         "label": "PAC vigente",
         "default": "PAC JULIO 2026",
+    },
+    "weekly_report": {
+        "label": "Número de la semana (INFORME_SEMANAL)",
+        "default": "",
+        "remember": False,
     },
 }
 
@@ -503,6 +514,10 @@ RULES = {
     ),
     "TRA-411": (
         "Asignar a todos los registros, en RANGO, el año en que se genera el archivo (por ejemplo, 2026)"
+    ),
+    "TRA-415": (
+        "Asignar a todos los registros, en INFORME_SEMANAL, el número de la semana que se escribe al "
+        "procesar, tal como se escribe (por ejemplo, 1010 o 0010). Es obligatorio en cada procesamiento y no se guarda para la próxima vez"
     ),
     "TRA-412": (
         "Asignar TIPO_DE_PAGO y NO_BENEFICIARIOS: si CONCEPTO contiene la expresión "

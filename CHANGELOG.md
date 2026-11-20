@@ -4,6 +4,9 @@ Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
 ## Sin publicar
 
+- Etapa 4: nuevo campo «Número de la semana (INFORME_SEMANAL)», debajo del PAC vigente. Su valor se escribe en la columna INFORME_SEMANAL de todos los registros (regla TRA-415). Se escribe como texto, con sus ceros (1010 o 0010). Es obligatorio en cada procesamiento y, a diferencia del PAC vigente, no se recuerda (en la CLI, `--param weekly_report 1010`).
+- Interfaz: un parámetro vacío deshabilita Procesar sin mostrar un mensaje en rojo, para no saturar la pantalla.
+- Núcleo: un parámetro puede declararse con `remember: False` (no se guarda en `parametros.json`).
 - Interfaz: la página le indica al navegador que no la traduzca. El traductor automático de Chrome o Edge cambiaba los textos (por ejemplo, «VR. BRUTO» por «realidad virtual») y hacía aparecer el error «NotFoundError: removeChild» al cargar los informes de pago en la Etapa 2.
 
 ## 1.1.0 – 2026-11-20

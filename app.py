@@ -76,6 +76,12 @@ def reset() -> None:
     st.session_state.saved_reports = {}
     st.session_state.analysis_cache = {}
     st.session_state.validation_cache = {}
+    # Los parámetros que no se recuerdan (el número de la semana) se vuelven a escribir en
+    # cada procesamiento: se borran para que el campo quede vacío.
+    for index, stage_module in enumerate(STAGES):
+        for parameter in parameter_specs(stage_module):
+            if not parameter.remember:
+                st.session_state.pop(f"parameter_{index}_{parameter.key}", None)
 
 
 # --- Barra lateral ---------------------------------------------------------
@@ -421,7 +427,8 @@ for spec in input_specs(stage):
         buttons_area = st.container()
 
 # Parámetros de la etapa: valores que el usuario escribe porque cambian con el tiempo (por
-# ejemplo, el PAC vigente). Se propone el último valor usado (parametros.json).
+# ejemplo, el PAC vigente). Se propone el último valor usado (parametros.json), salvo en los
+# que la etapa marca con `remember: False` (el número de la semana), que empiezan vacíos.
 parameters = {}
 for parameter in parameter_specs(stage):
     widget_key = f"parameter_{stage_index}_{parameter.key}"
@@ -430,8 +437,9 @@ for parameter in parameter_specs(stage):
     parameters[parameter.key] = st.text_input(parameter.label, key=widget_key)
     if parameter.help:
         st.caption(parameter.help)
+    # Un campo vacío deshabilita Procesar, sin mensaje: el campo vacío ya lo indica y un aviso
+    # en rojo saturaría la pantalla cada vez que se abre la etapa.
     if not parameters[parameter.key].strip():
-        st.error(f"Escriba el valor de «{parameter.label}» para poder procesar.", icon=":material/error:")
         invalid_inputs.append(parameter.key)
 
 missing_required = bool(incomplete_date_inputs) or bool(invalid_inputs) or any(

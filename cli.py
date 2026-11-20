@@ -7,8 +7,9 @@ En una entrada por fecha, cada archivo va precedido de su fecha (aaaa-mm-dd):
     uv run python cli.py --stage 2 --input ety_processed "ety.xlsx" --input treasury_reports 2026-09-28="pagos_28.xlsx"
 
 Los parámetros de una etapa (por ejemplo, el PAC vigente de la Etapa 4) van con --param; si no
-se dan, se usa el último valor usado:
-    uv run python cli.py --stage 4 --input ety_processed "ety.xlsx" --param current_pac "PAC NOVIEMBRE 2026"
+se dan, se usa el último valor usado. El número de la semana de la Etapa 4 no se recuerda y
+siempre hay que darlo:
+    uv run python cli.py --stage 4 --input ety_processed "ety.xlsx" --param current_pac "PAC NOVIEMBRE 2026" --param weekly_report 1010
 """
 
 import argparse
