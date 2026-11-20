@@ -75,6 +75,15 @@ DUPLICATE_TOLERATED_COLUMNS = ["Dpto", "Cd Fnd", "Producto"]
 # Caso 2.3: si difieren en alguna de estas, no se elimina ninguna fila del grupo.
 DUPLICATE_BLOCKING_COLUMNS = ["Subfideicomiso", "Cuenta", "Programa"]
 
+# Columna R del reporte (S del archivo de salida, por la columna Diferencia): se marcan como
+# Advertencia los registros de reprogramación (VAL-103), que pueden venir escritos completos
+# («Reprogramación») o con el código «REPR». Se busca el texto en cualquier parte de la celda,
+# sin distinguir mayúsculas ni tildes; «REPR» también encuentra «REPROGRAMACION».
+MORE_INFO_COLUMN = "Más Info"
+REPROGRAMMING_TERMS = ["REPR"]
+# Texto de la columna «Qué hacer» de la hoja Acciones para estos registros.
+REPROGRAMMING_ACTION = "Revisar el registro de reprogramación"
+
 # Columnas U y V del archivo de salida (T y U del reporte): cada Cuenta debe pertenecer a su Subfideicomiso (VAL-102).
 SUBTRUST_COLUMN = "Subfideicomiso"
 ACCOUNT_COLUMN = "Cuenta"
@@ -133,6 +142,7 @@ RULES = {
     "DUP-101": "Eliminar registros idénticos con el mismo Comprobante y Diferencia 0, sin comparar FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc (caso 2.1)",
     "DUP-102": "Eliminar registros con el mismo Comprobante y Diferencia 0 que solo difieren en Dpto, Cd Fnd y/o Producto, sin comparar FECHA DE PAGO, Asiento, LNP ni Nº Sec Doc (caso 2.2)",
     "VAL-101": "Identificar los registros con Comprobante repetido",
+    "VAL-103": "Identificar los registros de reprogramación: Más Info contiene «REPR» (por ejemplo, REPR o REPROGRAMACION), sin distinguir mayúsculas ni tildes",
     "VAL-102": "Marcar la Cuenta de los registros en los que Subfideicomiso y Cuenta no están relacionados o falta alguno de los dos",
 }
 

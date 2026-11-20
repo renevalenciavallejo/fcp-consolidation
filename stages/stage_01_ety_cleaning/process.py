@@ -26,6 +26,9 @@ from stages.stage_01_ety_cleaning.config import (
     DUPLICATE_TOLERATED_COLUMNS,
     GROSS_AMOUNT_COLUMN,
     INPUTS,
+    MORE_INFO_COLUMN,
+    REPROGRAMMING_ACTION,
+    REPROGRAMMING_TERMS,
     SUBTRUST_ACCOUNTS,
     SUBTRUST_COLUMN,
     VOUCHER_COLUMN,
@@ -54,6 +57,9 @@ def process(inputs: dict[str, pd.DataFrame], audit: AuditLog) -> pd.DataFrame:
     # Al final de la depuración, para que solo se marquen los que siguen repetidos.
     audit.step(f"Revisando registros con {VOUCHER_COLUMN} repetido")
     flag_repeated_vouchers(df, audit)
+    # Después de las eliminaciones, para que solo se marquen los registros que quedan.
+    audit.step(f"Revisando registros de reprogramación en {MORE_INFO_COLUMN}")
+    flag_reprogramming_records(df, audit)
     # También al final: así solo se marcan los registros que quedan en el archivo.
     audit.step(f"Validando la relación entre {SUBTRUST_COLUMN} y {ACCOUNT_COLUMN}")
     flag_unrelated_accounts(df, audit)
@@ -104,6 +110,23 @@ def flag_repeated_vouchers(df: pd.DataFrame, audit: AuditLog) -> None:
     flag_repeated_values(
         df, VOUCHER_COLUMN, audit, "VAL-101", WARNING,
         "Revisar si el registro está duplicado",
+    )
+
+
+def flag_reprogramming_records(df: pd.DataFrame, audit: AuditLog) -> None:
+    """Señala como Advertencia los registros cuyo Más Info contiene «REPR». Regla VAL-103.
+
+    Son reprogramaciones, que pueden venir escritas completas o con el código REPR.
+    No cambia ni elimina nada: la celda de Más Info queda resaltada en amarillo,
+    como el Comprobante repetido, y el usuario revisa el registro.
+    """
+    terms = [comparable_text(term) for term in REPROGRAMMING_TERMS]
+    is_reprogramming = df[MORE_INFO_COLUMN].map(
+        lambda value: any(term in comparable_text(value) for term in terms)
+    )
+    audit.finding_column(
+        df, is_reprogramming, MORE_INFO_COLUMN, WARNING, "VAL-103",
+        f"{MORE_INFO_COLUMN} indica una reprogramación", REPROGRAMMING_ACTION,
     )
 
 

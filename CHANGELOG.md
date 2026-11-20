@@ -2,6 +2,10 @@
 
 Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
+## Sin publicar
+
+- Etapa 1: los registros de reprogramación, cuyo Más Info contiene «REPR» (por ejemplo, REPR o Reprogramación, sin distinguir mayúsculas ni tildes), se señalan como Advertencia: la celda de Más Info queda en amarillo, como el Comprobante repetido, con la acción «Revisar el registro de reprogramación» (regla VAL-103). No se cambia ni se elimina nada.
+
 ## 1.2.0 – 2026-11-20
 
 - Etapa 4: nuevo campo «Número de la semana (INFORME_SEMANAL)», debajo del PAC vigente. Su valor se escribe en la columna INFORME_SEMANAL de todos los registros (regla TRA-415). Se escribe como texto, con sus ceros (1010 o 0010). Es obligatorio en cada procesamiento y, a diferencia del PAC vigente, no se recuerda (en la CLI, `--param weekly_report 1010`).

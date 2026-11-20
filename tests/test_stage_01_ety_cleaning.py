@@ -281,6 +281,7 @@ def test_step_log_shows_each_rule():
         "▸ Eliminando los comprobantes con VR. BRUTO en 0 (con Diferencia 0)",
         "▸ Eliminando registros duplicados por Comprobante (con Diferencia 0)",
         "▸ Revisando registros con Comprobante repetido",
+        "▸ Revisando registros de reprogramación en Más Info",
         "▸ Validando la relación entre Subfideicomiso y Cuenta",
         "▸ Generando el archivo de salida y el log",
     ]
@@ -590,6 +591,43 @@ def test_account_relation_has_four_digits_and_no_shared_accounts():
     assert len(SUBTRUST_ACCOUNTS) == 38
 
 
+# --- VAL-103: registros de reprogramación ---------------------------------------
+
+
+def test_reprogramming_records_are_flagged_in_more_info():
+    rows = (
+        with_voucher("1", Más_Info="PAGO_REPR_CONTRATO_303-2026"),    # fila 5: código REPR
+        with_voucher("2", Más_Info="Reprogramación de pago"),         # fila 6: palabra completa, con tilde
+        with_voucher("3", Más_Info="reprogramacion"),                 # fila 7: minúsculas, sin tilde
+        with_voucher("4"),                                            # fila 8: DS_PRUEBA, no se marca
+        with_voucher("5", Más_Info=None),                             # fila 9: vacío, no se marca
+        with_voucher("6", "Distribución Caja", Más_Info="REPR"),      # fila 10: se elimina antes, no se marca
+    )
+    result = run(ety_file(rows=rows))
+
+    findings = [
+        (f.source_row, f.column, f.severity, f.suggested_action)
+        for f in result.audit.findings if f.rule == "VAL-103"
+    ]
+    action = "Revisar el registro de reprogramación"
+    assert findings == [
+        (5, "Más Info", "Advertencia", action),
+        (6, "Más Info", "Advertencia", action),
+        (7, "Más Info", "Advertencia", action),
+    ]
+    lines = "\n".join(result.audit.step_lines())
+    assert "Revisando registros de reprogramación en Más Info" in lines
+
+    # La celda de Más Info queda resaltada en amarillo, como el Comprobante repetido, y sin cambios.
+    sheet = load_workbook(BytesIO(result.output_bytes)).active
+    column = OUTPUT_COLUMNS.index("Más Info") + 1
+    assert sheet.cell(1, column).value == "Más Info"
+    assert sheet.cell(2, column).value == "PAGO_REPR_CONTRATO_303-2026"
+    fill = sheet.cell(2, column).fill.fgColor.rgb
+    assert fill.endswith(SEVERITY_FILLS["Advertencia"])
+    assert not sheet.cell(5, column).fill.fgColor.rgb.endswith(SEVERITY_FILLS["Advertencia"])
+
+
 # --- Reglas que consulta el usuario --------------------------------------------
 
 
@@ -598,11 +636,12 @@ def test_applied_rules_follow_the_processing_order():
     assert codes == [
         "EST-007", "EST-001", "EST-003", "EST-004", "EST-005", "EST-006", "EST-008",
         "LIM-003", "TIP-005", "LIM-101", "TRA-101", "TRA-102", "LIM-102", "DUP-101", "DUP-102",
-        "VAL-101", "VAL-102",
+        "VAL-101", "VAL-103", "VAL-102",
     ]
     # Las reglas propias aparecen en el mismo orden en que se aplican en el log de acciones.
     rows = (zero_gross("9"), with_voucher("1"), with_voucher("1"), with_voucher("2"), with_voucher("2", Cuenta="X"),
-            with_voucher("3", "Distribución Caja"), with_voucher("4"), with_voucher("4", Dpto="X"))
+            with_voucher("3", "Distribución Caja"), with_voucher("4"), with_voucher("4", Dpto="X"),
+            with_voucher("5", Más_Info="PAGO_REPR_2026"))
     applied = list(dict.fromkeys(run(ety_file(rows=rows)).audit.actions_df()["Regla"]))
     assert applied == [c for c in codes if c in applied]
 
@@ -612,4 +651,4 @@ def test_rules_sheet_in_log():
     rows = list(sheet.iter_rows(values_only=True))
     assert rows[0] == ("Orden", "Código", "Regla")
     assert rows[1] == (1, "EST-007", "Validar que se carguen los archivos obligatorios y no sobren archivos")
-    assert len(rows) == 18
+    assert len(rows) == 19

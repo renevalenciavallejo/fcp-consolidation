@@ -119,6 +119,16 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 - Cada fila eliminada queda en la hoja *Acciones* con el motivo «Duplicado de la fila N (Comprobante X, caso 2.1/2.2)». En el log de ejecución se listan además los comprobantes de los grupos conservados por los casos 2.3 y 2.4.
 - En los reportes de ejemplo se eliminan 12 filas (…38426564) y 11 filas (…38393197). Ya no queda ningún grupo en el caso 2.4: el comprobante 00158196, que difiere en Dpto y Producto, pasa al caso 2.2 (se conserva la fila 407 y se eliminan la 408, la 409 y la 410).
 
+### Después del paso 7 – Identificar los registros de reprogramación (implementado)
+
+| Código | Regla |
+| --- | --- |
+| VAL-103 | Cada registro cuyo **Más Info** (columna R del reporte, S del archivo de salida) contiene «REPR» se señala como **Advertencia**: la celda de Más Info queda resaltada en amarillo, como el Comprobante repetido, y el hallazgo aparece en la hoja *Acciones* («Más Info indica una reprogramación», acción sugerida «Revisar el registro de reprogramación»). |
+
+- Son reprogramaciones, que pueden venir escritas completas («Reprogramación») o con el código «REPR». Se busca «REPR» en cualquier parte del texto, sin distinguir mayúsculas ni tildes, así que encuentra las dos formas. También marcaría cualquier otra palabra que empiece igual (por ejemplo, «REPRESENTACION»); el término está en `REPROGRAMMING_TERMS` de `config.py`.
+- Se ejecuta después de la revisión VAL-101 y antes de la VAL-102, cuando ya se eliminaron las filas de «Distribución Caja», los comprobantes con VR. BRUTO en 0 y los duplicados: solo se señalan los registros que quedan en el archivo.
+- No se cambia ningún valor ni se elimina ningún registro.
+
 ### Paso 8 – Validar la relación entre Subfideicomiso y Cuenta (implementado)
 
 | Código | Regla |
@@ -144,7 +154,7 @@ Los registros sin **Programa** cuyo **Más Info** contiene «REN-RENDIMIENTOS»,
 
 ## Archivo de salida
 
-Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O), sin los comprobantes con VR. BRUTO en 0 (LIM-102) y sin los duplicados del paso 7. Los registros sin Programa de rendimientos, retenciones y estampillas se conservan (se eliminan en la Etapa 2). Los comprobantes que siguen repetidos quedan en amarillo y las cuentas que no corresponden a su Subfideicomiso, en rojo.
+Los registros del reporte con los encabezados en la fila 1 (sin las filas de título) y las columnas E a J con formato de moneda, sin las filas de «Distribución Caja» con la columna Diferencia en la K ordenados por Comprobante (columna O), sin los comprobantes con VR. BRUTO en 0 (LIM-102) y sin los duplicados del paso 7. Los registros sin Programa de rendimientos, retenciones y estampillas se conservan (se eliminan en la Etapa 2). Los comprobantes que siguen repetidos y el Más Info de los registros de reprogramación quedan en amarillo, y las cuentas que no corresponden a su Subfideicomiso, en rojo.
 
 El archivo conserva la apariencia del reporte original: el nombre de la hoja (por ejemplo, «sheet1»), los encabezados en Arial 10 negrita con fondo gris y borde doble, la fuente de los datos y los anchos de columna. La columna Diferencia toma el estilo de Importe. Las fechas se muestran como `dd/mm/aaaa` y las columnas E a K con formato de moneda; además, el encabezado tiene filtros y queda inmovilizado.
 
