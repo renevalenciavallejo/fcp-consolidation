@@ -587,7 +587,7 @@ def test_account_relation_has_four_digits_and_no_shared_accounts():
     accounts = [a for group in SUBTRUST_ACCOUNTS.values() for a in group]
     assert all(len(a) == 4 and a.isdigit() for a in accounts)
     assert len(accounts) == len(set(accounts)) == 63
-    assert len(SUBTRUST_ACCOUNTS) == 39
+    assert len(SUBTRUST_ACCOUNTS) == 38
 
 
 # --- Reglas que consulta el usuario --------------------------------------------

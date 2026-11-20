@@ -125,7 +125,7 @@ Los encabezados se comparan sin tener en cuenta espacios sobrantes.
 | --- | --- |
 | VAL-102 | Cada **Cuenta** debe pertenecer a su **Subfideicomiso**. Si los dos valores no están relacionados o falta alguno, el registro se señala como **Error**: se resalta en rojo la celda de Cuenta (columna U del reporte, V del archivo de salida), aunque esté vacía. |
 
-- **Relación:** sale del Excel «RELACIÓN SUBCUENTAS Y CUENTAS BANCARIAS» (columna D, código del Subfideicomiso; columna G, cuenta bancaria) y está en `SUBTRUST_ACCOUNTS` de `config.py`: 39 subfideicomisos y 63 cuentas. Si se abre una cuenta nueva, se agrega allí.
+- **Relación:** sale del Excel «RELACIÓN SUBCUENTAS Y CUENTAS BANCARIAS» (columna D, código del Subfideicomiso; columna G, cuenta bancaria) y está en `SUBTRUST_ACCOUNTS` de `config.py`: 38 subfideicomisos y 63 cuentas. Si se abre una cuenta nueva, se agrega allí.
 - **Comparación:** el ETY solo trae los 4 últimos dígitos de la cuenta, así que se compara con los 4 últimos dígitos de cada cuenta de la relación. Esos 4 dígitos no se repiten entre cuentas.
 - **Cuenta sin código:** la cuenta `000-3063120` (CONVENIO ART - ICBF - FCP) no tiene código en el Excel y se excluye de la relación.
 - **Subfideicomiso sin cuentas o desconocido:** un código que no está en la relación, o que no tiene cuenta (el 2050, en trámite de apertura), no tiene cuentas relacionadas: sus registros se señalan.
