@@ -2,6 +2,10 @@
 
 Formato: `MAYOR.MENOR.PARCHE`. La versión se define en `pyproject.toml`.
 
+## Sin publicar
+
+- Interfaz: la página le indica al navegador que no la traduzca. El traductor automático de Chrome o Edge cambiaba los textos (por ejemplo, «VR. BRUTO» por «realidad virtual») y hacía aparecer el error «NotFoundError: removeChild» al cargar los informes de pago en la Etapa 2.
+
 ## 1.1.0 – 2026-11-20
 
 - Etapa 4: el PAC vigente (valor de RECURSOS para los Subfideicomisos del PAC y los Programas 0001 y 0002) ya no está fijo en el código: se escribe en el campo «PAC vigente» de la interfaz (o con `--param current_pac` en la CLI). La herramienta propone el último valor usado, que guarda en `parametros.json`, y lo deja en el log de ejecución. Si el campo queda vacío, no se puede procesar.

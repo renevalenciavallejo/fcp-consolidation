@@ -103,8 +103,19 @@ stage = STAGES[stage_index]
 # elija después. Si una versión futura de Streamlit cambia esa llave, solo se pierde el
 # tema inicial: la aplicación sigue funcionando. Va al final de la barra lateral porque un
 # elemento con un script ocupa un espacio vacío, que en el área principal correría la página.
+# El mismo script le indica al navegador que no traduzca la página: el traductor automático
+# de Chrome o Edge cambia los textos («VR. BRUTO» por «realidad virtual») y reemplaza
+# elementos de la página, y Streamlit falla al actualizarla (NotFoundError: removeChild).
 st.sidebar.html(f"""
 <script>
+document.documentElement.setAttribute("translate", "no");
+document.documentElement.classList.add("notranslate");
+if (!document.querySelector('meta[name="google"]')) {{
+    const meta = document.createElement("meta");
+    meta.name = "google";
+    meta.content = "notranslate";
+    document.head.appendChild(meta);
+}}
 if (!localStorage.getItem("fcp_default_theme_applied")) {{
     localStorage.setItem("fcp_default_theme_applied", "1");
     localStorage.setItem(`stActiveTheme-${{location.pathname}}-v2`, JSON.stringify("{DEFAULT_THEME}"));
